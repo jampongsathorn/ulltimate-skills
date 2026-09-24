@@ -129,50 +129,76 @@ jobs:
           PY
           tail -25 out/audio_stats.txt || true
 
-      - name: Transcribe audio (faster-whisper)
+      - name: Transcribe audio (demucs vocals + faster-whisper)
         continue-on-error: true
         run: |
           set -x
-          pip install -q faster-whisper
+          pip install -q faster-whisper torch --index-url https://pypi.org/simple 2>&1 | tail -2
+          pip install -q demucs 2>&1 | tail -2 || echo "demucs unavailable"
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vn -ac 1 -ar 16000 -y /tmp/a.wav
+          # small mp3 of the clip's audio so a human can verify the transcript
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vn -ac 1 -ar 24000 -b:a 48k -y out/audio.mp3 || true
+          VOCALS=/tmp/a.wav
+          if python -c "import demucs" 2>/dev/null; then
+            python -m demucs --two-stems=vocals -n htdemucs -o /tmp/demucs /tmp/v.mp4 > out/demucs.log 2>&1 || echo "demucs failed" >> out/demucs.log
+            if [ -f /tmp/demucs/htdemucs/vocals.wav ]; then
+              ffmpeg -hide_banner -loglevel error -i /tmp/demucs/htdemucs/vocals.wav -ac 1 -ar 16000 -y /tmp/vocals.wav
+              VOCALS=/tmp/vocals.wav
+              echo "using demucs vocals" | tee out/vocals_note.txt
+              # normalize vocals so whisper gets a healthy level
+              ffmpeg -hide_banner -loglevel error -i /tmp/vocals.wav -af "loudnorm=I=-18:TP=-1.5:LRA=11" -ar 16000 -ac 1 -y /tmp/vocals_norm.wav && VOCALS=/tmp/vocals_norm.wav
+            fi
+          fi
           cat > /tmp/tr.py <<'PY'
-          import sys
+          import sys, os
           from faster_whisper import WhisperModel
 
-          def run(model, tag, vad):
+          SRC = os.environ.get("VOCALS", "/tmp/a.wav")
+
+          def run(model, tag, audio, vad):
               segs, info = model.transcribe(
-                  "/tmp/a.wav", language="th", beam_size=5, word_timestamps=False,
+                  audio, language="th", beam_size=5,
                   condition_on_previous_text=False,
-                  vad_filter=vad, vad_parameters=dict(min_silence_duration_ms=400) if vad else None,
+                  temperature=[0.0, 0.2, 0.4, 0.6],
+                  compression_ratio_threshold=2.4,
+                  log_prob_threshold=-1.0,
+                  no_speech_threshold=0.6,
+                  repetition_penalty=1.15,
+                  vad_filter=vad,
+                  vad_parameters=dict(min_silence_duration_ms=500) if vad else None,
               )
               rows = []
               for s in segs:
-                  rows.append("[%7.2f-%7.2f] %s" % (s.start, s.end, s.text.strip()))
-                  print("  " + rows[-1], flush=True)
+                  line = "[%7.2f-%7.2f] %s" % (s.start, s.end, s.text.strip())
+                  rows.append(line)
+                  print("   " + line, flush=True)
               with open("out/transcript_%s.txt" % tag, "w", encoding="utf-8") as f:
-                  f.write("model=%s vad=%s lang=%s prob=%.3f dur=%.2fs\n\n" % (tag, vad, info.language, info.language_probability, info.duration))
+                  f.write("audio=%s vad=%s model=%s lang=%s prob=%.3f dur=%.2fs\n\n"
+                          % (audio, vad, tag, info.language, info.language_probability, info.duration))
                   f.write("\n".join(rows) + "\n")
-              with open("out/transcript_%s.srt" % tag, "w", encoding="utf-8") as f:
-                  for i, s in enumerate(segs if isinstance(segs, list) else rows):
-                      pass
               return rows
 
-          ladder = ["large-v3-turbo", "medium"]
-          for name in ladder:
+          model = None
+          for name in ("large-v3-turbo", "medium"):
               try:
                   print("loading", name, flush=True)
                   model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=4)
+                  print("loaded", name, flush=True)
+                  break
               except Exception as e:
                   print("model failed", name, repr(e), flush=True)
-                  continue
-              for vad, tag in ((False, name + "_novad"), (True, name + "_vad")):
-                  try:
-                      print("== transcribe", tag, flush=True)
-                      run(model, tag, vad)
-                  except Exception as e:
-                      print("transcribe failed", tag, repr(e), flush=True)
-              break  # first model that loads wins
+          if model is None:
+              sys.exit("no model")
+          try:
+              run(model, "vocals_novad", SRC, False)
+          except Exception as e:
+              print("vocals pass failed", repr(e), flush=True)
+          try:
+              run(model, "mix_novad", "/tmp/a.wav", False)
+          except Exception as e:
+              print("mix pass failed", repr(e), flush=True)
           PY
-          timeout 1500 python /tmp/tr.py || echo "transcribe step hit its time budget"
+          VOCALS="$VOCALS" timeout 1500 python /tmp/tr.py || echo "transcribe step hit its time budget"
 
       - name: Publish artifacts to throwaway branch
         if: always()
