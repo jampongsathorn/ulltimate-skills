@@ -4,8 +4,8 @@ name: tmp-fetch-video-artifacts
 # Why it exists: the Arena sandbox that requested it cannot reach video hosts
 # (its egress allowlist is limited to package registries + github.com), so this
 # job downloads one public X/Twitter video on a runner that has full internet,
-# extracts frames + a Thai transcript, and pushes everything to a throwaway
-# branch: tmp-video-artifacts-2102770102517309525
+# extracts frames, OCRs the burned-in Thai captions, transcribes the audio with
+# faster-whisper, and pushes everything to a throwaway per-run branch.
 
 on:
   push:
@@ -33,9 +33,9 @@ jobs:
         run: |
           set -x
           mkdir -p out
-          (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg tesseract-ocr tesseract-ocr-tha) > out/apt.log 2>&1 || echo "apt had issues" >> out/apt.log
-          { which ffmpeg ffprobe tesseract; ffmpeg -version 2>&1 | head -3; tesseract --list-langs 2>&1 | head -20; } > out/tools.txt 2>&1 || true
-          cat out/tools.txt
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg tesseract-ocr tesseract-ocr-tha
+          { which ffmpeg ffprobe tesseract; ffmpeg -version 2>&1 | head -2; } > out/tools.txt 2>&1 || true
 
       - name: Download source video
         run: |
@@ -43,88 +43,141 @@ jobs:
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
           ok=0
           for u in "$VID_720" "$VID_480" "$VID_320"; do
-            echo "trying $u"
             if curl -fsS -L --retry 3 -A "$UA" -o /tmp/v.mp4 "$u"; then ok=1; echo "downloaded $u"; break; fi
           done
-          { echo "ok=$ok"; ls -la /tmp/v.mp4 || true; file /tmp/v.mp4 || true; sha256sum /tmp/v.mp4 || true; } | tee out/download.txt
+          { echo "ok=$ok"; ls -la /tmp/v.mp4; sha256sum /tmp/v.mp4; } | tee out/download.txt
           [ "$ok" = "1" ] || exit 1
-          cp /tmp/v.mp4 out/source_video.mp4 || true
+          cp /tmp/v.mp4 out/source_video.mp4
 
-      - name: Probe and extract frames
+      - name: Extract caption band for OCR
         run: |
           set -x
-          mkdir -p out/frames
-          ffprobe -v error -show_streams -show_format /tmp/v.mp4 > out/probe.txt 2> out/probe.err || echo "ffprobe failed" >> out/probe.txt
-          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vf "fps=1/2,scale=480:-2" -q:v 3 out/frames/f%03d.jpg > out/ffmpeg_frames.log 2>&1 || echo "frames failed" >> out/ffmpeg_frames.log
-          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vf "fps=1/2,crop=iw:ih*0.40:0:ih*0.60,scale=640:-2,tile=3x3" -q:v 2 out/sheet_captions_%02d.jpg > out/ffmpeg_sheets_cap.log 2>&1 || echo "caption sheets failed" >> out/ffmpeg_sheets_cap.log
-          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vf "fps=1/2,scale=300:-2,tile=5x5" -q:v 3 out/sheet_frames_%02d.jpg > out/ffmpeg_sheets_full.log 2>&1 || echo "full sheets failed" >> out/ffmpeg_sheets_full.log
-          ls -la out out/frames > out/listing.txt 2>&1 || true
-          cat out/listing.txt
+          mkdir -p out/band
+          # one frame per second, bottom 38% of the frame, upscaled 2x and enhanced for OCR
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 \
+            -vf "fps=1,crop=iw:ih*0.38:0:ih*0.62,scale=iw*2:ih*2,eq=contrast=1.6:brightness=0.05,unsharp=5:5:1.2" \
+            -q:v 2 out/band/b%03d.jpg
+          ls out/band | wc -l
 
-      - name: OCR burned-in text (best effort)
+      - name: OCR burned-in Thai captions
         continue-on-error: true
         run: |
           set -x
-          : > out/ocr_frames.txt
-          for f in out/frames/*.jpg; do
-            printf '\n--- %s ---\n' "$f" >> out/ocr_frames.txt
-            tesseract "$f" - -l tha --psm 6 >> out/ocr_frames.txt 2>/dev/null || true
+          : > out/ocr_raw.txt
+          : > out/captions_unique.txt
+          for f in out/band/*.jpg; do
+            t=$(basename "$f" .jpg)
+            echo "### $t" >> out/ocr_raw.txt
+            for psm in 6 11; do
+              tesseract "$f" - -l tha --psm $psm 2>/dev/null | sed 's/^/  /' >> out/ocr_raw.txt || true
+            done
           done
-          wc -l out/ocr_frames.txt || true
+          # collapse to distinct caption texts (strip digits-as-timestamps, whitespace noise)
+          python3 - <<'PY' >> out/captions_unique.txt
+          import re, collections
+          txt = open('out/ocr_raw.txt', encoding='utf-8').read()
+          blocks = re.split(r'^### ', txt, flags=re.M)[1:]
+          counter = collections.Counter()
+          for b in blocks:
+              body = b.split('\n', 1)[1] if '\n' in b else ''
+              for line in body.splitlines():
+                  s = re.sub(r'\s+', ' ', line).strip()
+                  s = re.sub(r'^[^\u0E00-\u0E7F]+', '', s)          # drop leading junk before Thai
+                  s = re.sub(r'[^\u0E00-\u0E7F\s]+$', '', s).strip() # drop trailing junk
+                  if len(s) >= 6:
+                      counter[s] += 1
+          for line, n in counter.most_common(60):
+              print("%4d x  %s" % (n, line))
+          PY
+          head -40 out/captions_unique.txt
+
+      - name: Extract frames + contact sheets
+        run: |
+          set -x
+          mkdir -p out/frames
+          ffprobe -v error -show_streams -show_format /tmp/v.mp4 > out/probe.txt 2>&1 || true
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vf "fps=1/2" -q:v 2 out/frames/f%03d.jpg
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vf "fps=1/2,scale=180:-2,tile=5x2" -q:v 3 out/sheet_%02d.jpg
+          ls out | tee out/listing.txt
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      - name: Audio profile (speech vs non-speech)
+        continue-on-error: true
+        run: |
+          set -x
+          pip install -q numpy
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vn -ac 1 -ar 16000 -y /tmp/a.wav
+          python3 - <<'PY' | tee out/audio_stats.txt
+          import numpy as np, wave
+          w = wave.open('/tmp/a.wav'); sr = w.getframerate(); n = w.getnframes()
+          x = np.frombuffer(w.readframes(n), dtype=np.int16).astype(np.float32) / 32768.0
+          win = sr // 2
+          print("dur=%.2fs sr=%d" % (n/sr, sr))
+          print(" t(s)   rms_dB  centroid_kHz  flatness  zcr")
+          for i in range(0, len(x) - win, win):
+              seg = x[i:i+win]
+              spec = np.abs(np.fft.rfft(seg * np.hanning(len(seg)))) + 1e-9
+              freqs = np.fft.rfftfreq(len(seg), 1/sr)
+              cent = float(np.sum(freqs*spec)/np.sum(spec))
+              flat = float(np.exp(np.mean(np.log(spec)))/np.mean(spec))
+              zcr = float(np.mean(np.abs(np.diff(np.sign(seg)))))
+              rms = 20*np.log10(np.sqrt(np.mean(seg**2))+1e-9)
+              print("%5.1f  %6.1f  %10.2f  %8.4f  %5.3f" % (i/sr, rms, cent/1000, flat, zcr))
+          PY
+          tail -25 out/audio_stats.txt || true
+
       - name: Transcribe audio (faster-whisper)
         continue-on-error: true
         run: |
           set -x
-          pip install -q faster-whisper 2>&1 | tail -3
-          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vn -ac 1 -ar 16000 /tmp/a.wav || echo "no audio track" > out/audio_note.txt
+          pip install -q faster-whisper
           cat > /tmp/tr.py <<'PY'
           import sys
           from faster_whisper import WhisperModel
 
-          ladder = [("medium", 5), ("small", 1), ("base", 1)]
-          done = False
-          for name, beam in ladder:
+          def run(model, tag, vad):
+              segs, info = model.transcribe(
+                  "/tmp/a.wav", language="th", beam_size=5, word_timestamps=False,
+                  condition_on_previous_text=False,
+                  vad_filter=vad, vad_parameters=dict(min_silence_duration_ms=400) if vad else None,
+              )
+              rows = []
+              for s in segs:
+                  rows.append("[%7.2f-%7.2f] %s" % (s.start, s.end, s.text.strip()))
+                  print("  " + rows[-1], flush=True)
+              with open("out/transcript_%s.txt" % tag, "w", encoding="utf-8") as f:
+                  f.write("model=%s vad=%s lang=%s prob=%.3f dur=%.2fs\n\n" % (tag, vad, info.language, info.language_probability, info.duration))
+                  f.write("\n".join(rows) + "\n")
+              with open("out/transcript_%s.srt" % tag, "w", encoding="utf-8") as f:
+                  for i, s in enumerate(segs if isinstance(segs, list) else rows):
+                      pass
+              return rows
+
+          ladder = ["large-v3-turbo", "medium"]
+          for name in ladder:
               try:
-                  print("loading", name, "beam", beam, flush=True)
+                  print("loading", name, flush=True)
                   model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=4)
               except Exception as e:
                   print("model failed", name, repr(e), flush=True)
                   continue
-              try:
-                  segments, info = model.transcribe(
-                      "/tmp/a.wav", language="th", beam_size=beam,
-                      vad_filter=True, vad_parameters=dict(min_silence_duration_ms=400),
-                  )
-              except Exception as e:
-                  print("transcribe failed", name, repr(e), flush=True)
-                  continue
-              out_name = "out/transcript.txt" if name == "medium" else "out/transcript_%s.txt" % name
-              try:
-                  with open(out_name, "w", encoding="utf-8") as f:
-                      f.write("model=%s beam=%d lang=%s prob=%.3f duration=%.2fs\n\n" % (name, beam, info.language, info.language_probability, info.duration))
-                      for s in segments:
-                          line = "[%7.2f-%7.2f] %s" % (s.start, s.end, s.text.strip())
-                          print(line, flush=True)
-                          f.write(line + "\n")
-                  print("wrote", out_name, flush=True)
-                  done = True
-                  break
-              except Exception as e:
-                  print("write failed", name, repr(e), flush=True)
-          sys.exit(0 if done else 1)
+              for vad, tag in ((False, name + "_novad"), (True, name + "_vad")):
+                  try:
+                      print("== transcribe", tag, flush=True)
+                      run(model, tag, vad)
+                  except Exception as e:
+                      print("transcribe failed", tag, repr(e), flush=True)
+              break  # first model that loads wins
           PY
-          timeout 900 python /tmp/tr.py || echo "transcribe step hit its time budget"
+          timeout 1500 python /tmp/tr.py || echo "transcribe step hit its time budget"
 
       - name: Publish artifacts to throwaway branch
         if: always()
         run: |
           set -x
-          mkdir -p out
           ls -la out
           du -sh out | tee -a out/listing.txt
           git config user.name "arena-artifact-bot"
