@@ -1,0 +1,14 @@
+# Skill workspaces (eval runs, benchmarks, feedback) written by skill-creator
+*-workspace/
+feedback.json
+
+# Packaged skill files
+*.skill
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
