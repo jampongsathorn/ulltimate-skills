@@ -29,7 +29,7 @@ Finding _facts_ is your job, never the user's. When a frontier question needs a 
 
 The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. Do not act on it until the user confirms you have reached a shared understanding.
 
-## Arena / Claude Code adaptation
+## Arena / Claude Code Adaptation
 
 This skill is dual-mode:
 - **Claude Code**: installed as `/ulltimate-skills:grilling`, auto-discovered via `skills/` scanning
@@ -38,7 +38,7 @@ This skill is dual-mode:
 When using in Arena:
 - Use `bash` to gather facts (`find`, `rg`, `ls`) before asking
 - Never ask user for facts you can look up
-- Keep rounds in Thai if user writes Thai, English if user writes English
+- Keep language consistent with user's language (English if user writes English)
 - End with a clear `Shared Understanding` summary and ask for `confirm`
 
 ## Closing Checklist

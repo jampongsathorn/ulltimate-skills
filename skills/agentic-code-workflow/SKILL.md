@@ -5,60 +5,60 @@ description: Systematic workflow for code agentic agents to work like a senior e
 
 # Agentic Code Workflow
 
-ทำให้ code agent ทำงานเป็นระบบ ไม่ใช่ debug ไปเรื่อยๆ
+Make code agents work systematically, not debug endlessly.
 
 ## When to use
 
-- สร้าง feature ใหม่, แก้ bug, refactor, สร้าง skill ใหม่
-- Agent แก้ไฟล์เดียวแล้วพังไฟล์อื่น (dependency bug)
-- งานที่เคยทำช้าเพราะไม่มี workflow ชัดเจนก่อนลงมือ
-- ทุกครั้งที่เริ่ม session ใหม่ใน Arena หรือ Claude Code และอยากให้เป็นระบบตั้งแต่ต้น
+- Building a new feature, fixing a bug, refactoring, creating a new skill
+- Agent fixes one file but breaks others (dependency bug)
+- Work that was slow because there was no clear workflow before coding
+- Every time you start a new session in Arena or Claude Code and want systematic behavior from the start
 
-ถ้าเป็นงานแก้ bug โดยเฉพาะ ให้เรียก `bugfix-systematic` ต่อจาก skill นี้ — skill นี้คือกรอบใหญ่, `bugfix-systematic` คือกรอบย่อยสำหรับ bug
+If it's specifically a bug fix, call `bugfix-systematic` after this skill — this one is the outer frame, `bugfix-systematic` is the inner frame for bugs.
 
 ## Core Principle
 
-**หาข้อเท็จจริงเอง อย่าถาม user ถ้าหาได้จากเครื่องมือ** — นี่คือกฎจาก `grilling`
+**Find facts yourself. Don't ask the user for anything you can look up with tools.** — This is the rule from `grilling`.
 
-## Workflow (6 ขั้นบังคับ)
+## Workflow (6 mandatory steps)
 
-### 1. Scan — หาข้อเท็จจริงก่อน
+### 1. Scan — Gather facts first
 
-รันคำสั่งเหล่านี้ก่อนถามอะไรทั้งสิ้น:
+Run these before asking anything:
 
 ```bash
-# โครงสร้าง repo 20-30 ไฟล์แรก
+# Repo structure, first 20-30 files
 find . -type f -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/dist/*" -not -path "*/__pycache__/*" | head -30
 
-# ดูว่ามี AGENTS.md / CLAUDE.md / README.md ไหม
+# Check for AGENTS.md / CLAUDE.md / README.md
 ls -la | head -30
 cat AGENTS.md 2>/dev/null | head -100
 cat CLAUDE.md 2>/dev/null | head -100
 
-# ถ้าเป็น Claude Code plugin
+# If Claude Code plugin
 cat .claude-plugin/plugin.json
 cat .claude-plugin/marketplace.json
 claude plugin validate . 2>&1 | tail -20
 
-# ถ้ามี package.json / pyproject.toml
+# If package.json / pyproject.toml exists
 cat package.json 2>/dev/null | head -50
 cat pyproject.toml 2>/dev/null | head -50
 ```
 
-ทำไมต้อง scan? เพราะ bug แบบ "แก้ไฟล์เดียวแต่พังไฟล์อื่น" เกิดจากการไม่อ่าน dependency ก่อน
+Why scan? Bugs like "fix one file, break another" happen because dependencies were never read.
 
-### 2. Grill — สร้าง design tree
+### 2. Grill — Build a design tree
 
-เรียก `grilling` skill:
+Invoke the `grilling` skill:
 
-- ใน Claude Code: `/ulltimate-skills:grilling`
-- ใน Arena: `read_file skills/grilling/SKILL.md` แล้วทำตาม
+- In Claude Code: `/ulltimate-skills:grilling`
+- In Arena: `read_file skills/grilling/SKILL.md` and follow it
 
-แมปเป็น tree, ถาม frontier เป็นรอบๆ จนหมดสมมติฐาน อย่าเริ่ม code จนกว่าจะได้ `confirm`
+Map as a tree, ask the frontier in rounds until no assumptions remain. Don't write code until you get `confirm`.
 
-### 3. Plan — เขียนแผนสั้นที่รันได้
+### 3. Plan — Write a short, runnable plan
 
-สร้าง `plan.md` หรือ `task.md` ที่มี:
+Create `plan.md` or `task.md`:
 
 ```markdown
 ## Goal
@@ -68,12 +68,12 @@ cat pyproject.toml 2>/dev/null | head -50
 ## Validation (how to know it's done)
 ```
 
-### 4. Implement — minimal diff
+### 4. Implement — Minimal diff
 
-กฎ:
-- อ่านไฟล์ก่อนแก้เสมอ (`read_file`)
-- แก้ทีละไฟล์, diff เล็ก
-- ถ้าแก้ function ที่มีคน import ให้ `rg` หาทุกที่ที่ใช้ก่อน:
+Rules:
+- Always read file before editing (`read_file`)
+- Edit one file at a time, keep diffs small
+- If you change a function that is imported elsewhere, `rg` for all usages first:
 
 ```bash
 # JS/TS generic
@@ -83,12 +83,12 @@ rg -n "from ['\"].*fileName|import.*fileName" --type js --type ts
 # Python generic
 rg -n "def functionName|from.*fileName import|import.*fileName" --type py
 
-# ใช้ ast-grep ถ้าติดตั้ง
+# Use ast-grep if installed
 ast-grep --pattern 'function $FUNC($$$ARGS) { $$$BODY }' -l js,ts
 ast-grep --pattern 'def $FUNC($$$ARGS):' -l python
 ```
 
-### 5. Validate — พิสูจน์ว่าครบ
+### 5. Validate — Prove it's complete
 
 ```bash
 # JS/TS
@@ -99,29 +99,27 @@ npm test 2>&1 | tail -50
 python3 -m compileall skills/
 pytest -q 2>&1 | tail -50
 
-# Claude Code plugin (repo นี้)
+# Claude Code plugin (this repo)
 claude plugin validate .
-# test install จริง
+# Real install test
 tmp=$(mktemp -d); cd $tmp; mkdir test; cd test
-claude plugin marketplace add /path/to/ulltimate-skills --force 2>&1 | tail -5
+claude plugin marketplace add /path/to/ulltimate-skills 2>&1 | tail -5
 claude plugin install ulltimate-skills@ulltimate-skills 2>&1 | tail -5
 claude plugin details ulltimate-skills@ulltimate-skills 2>&1 | tail -20
 cd /; rm -rf $tmp
 
-# Arena preview (ถ้ามี web server)
-# ต้อง bind 0.0.0.0, ใช้ relative URL, allowedHosts, ไม่มี X-Frame-Options
+# Arena preview (if web server)
+# Must bind 0.0.0.0, use relative URLs, allowedHosts, no X-Frame-Options
 ```
 
-### 6. Document — ปิดงานแบบเป็นระบบ
+### 6. Document — Close systematically
 
-- อัพเดต `AGENTS.md` ถ้ามี skill ใหม่
-- อัพเดต `README.md` / `CLAUDE.md` ถ้ามี workflow ใหม่
-- เขียนสรุป root cause 1 ย่อหน้าใน commit message
-- ลบไฟล์ชั่วคราวใน `/tmp`
+- Update `AGENTS.md` if there's a new skill
+- Update `README.md` / `CLAUDE.md` if workflow changed
+- Write 1-paragraph root cause summary in commit message
+- Clean up temp files in `/tmp`
 
 ## Stack Generic Support
-
-Skill นี้รองรับทั้ง JS/TS และ Python:
 
 | Task | JS/TS | Python |
 |------|-------|--------|
@@ -132,22 +130,22 @@ Skill นี้รองรับทั้ง JS/TS และ Python:
 
 ## Example
 
-**Input:** "แก้ bug ที่แก้ไฟล์เดียวแล้วพังอีกไฟล์"
+**Input:** "Fix a bug where fixing one file breaks another"
 
-**Output ของ skill:**
-1. Scan → เจอว่า `utils.ts` ถูก import โดย 5 ไฟล์
-2. Grill → ถามว่าแก้แบบไหน, ครอบคลุมแค่ไหน, stack อะไร
-3. Plan → เขียน `plan.md` ว่ามี 5 ไฟล์โดน impact
-4. Implement → แก้ `utils.ts` + 5 ไฟล์ที่ import
-5. Validate → `npm test` pass + `rg` ไม่เจอ pattern เก่าเหลือ
-6. Document → อัพเดต AGENTS.md + commit
+**Skill output:**
+1. Scan → finds `utils.ts` is imported by 5 files
+2. Grill → asks fix scope, coverage definition, stack
+3. Plan → writes `plan.md` with 5 impacted files
+4. Implement → fixes `utils.ts` + 5 importers
+5. Validate → `npm test` passes + `rg` shows no old pattern left
+6. Document → updates AGENTS.md + commits
 
-## Closing Checklist (บังคับ)
+## Closing Checklist (mandatory)
 
-- [ ] Scan ครบ (find + read AGENTS.md/CLAUDE.md + validate)
-- [ ] Grill จน frontier หมด + ได้ confirm
-- [ ] Plan เขียนไว้ (มี Impacted Files list)
-- [ ] Implement แบบ minimal diff + อ่านไฟล์ก่อนแก้ + rg หา usage ครบ
-- [ ] Validate ผ่าน (build + test + plugin validate + test install ถ้าเป็น plugin repo)
-- [ ] Document อัพเดต (AGENTS.md / README / commit message มี root cause)
-- [ ] ไม่มีไฟล์ชั่วคราวค้างใน /tmp หรือ workspace ที่ควร gitignore
+- [ ] Scan complete (find + read AGENTS.md/CLAUDE.md + validate)
+- [ ] Grill until frontier empty + got confirm
+- [ ] Plan written (includes Impacted Files list)
+- [ ] Implement as minimal diff + read before edit + rg for usages complete
+- [ ] Validate passed (build + test + plugin validate + test install if plugin repo)
+- [ ] Document updated (AGENTS.md / README / commit message includes root cause)
+- [ ] No temp files left in /tmp or workspace that should be gitignored
