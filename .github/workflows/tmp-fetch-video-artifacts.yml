@@ -17,7 +17,7 @@ permissions:
   contents: write
 
 env:
-  OUT_BRANCH: tmp-video-artifacts-2102770102517309525
+  OUT_BRANCH: tmp-video-artifacts-2102770102517309525-${{ github.run_number }}
   VID_720: 'https://video.twimg.com/amplify_video/2102769959642492928/vid/avc1/720x1280/9cGs3E5qtolwXL6l.mp4?tag=29'
   VID_480: 'https://video.twimg.com/amplify_video/2102769959642492928/vid/avc1/480x852/0fPgIZXbRW7mA_yU.mp4?tag=29'
   VID_320: 'https://video.twimg.com/amplify_video/2102769959642492928/vid/avc1/320x568/MpYm22mr3jorlfOG.mp4?tag=29'
@@ -83,36 +83,42 @@ jobs:
           pip install -q faster-whisper 2>&1 | tail -3
           ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vn -ac 1 -ar 16000 /tmp/a.wav || echo "no audio track" > out/audio_note.txt
           cat > /tmp/tr.py <<'PY'
-          import sys, os
+          import sys
           from faster_whisper import WhisperModel
 
-          models = ["large-v3", "medium", "small"]
-          for name in models:
+          ladder = [("medium", 5), ("small", 1), ("base", 1)]
+          done = False
+          for name, beam in ladder:
               try:
-                  print("loading", name, flush=True)
+                  print("loading", name, "beam", beam, flush=True)
                   model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=4)
-                  print("using", name, flush=True)
-                  break
               except Exception as e:
                   print("model failed", name, repr(e), flush=True)
-                  model = None
-          if model is None:
-              sys.exit("no model could be loaded")
-
-          segments, info = model.transcribe(
-              "/tmp/a.wav", language="th", beam_size=5,
-              vad_filter=True, vad_parameters=dict(min_silence_duration_ms=400),
-          )
-          out_name = "out/transcript.txt" if name == "large-v3" else "out/transcript_%s.txt" % name
-          with open(out_name, "w", encoding="utf-8") as f:
-              f.write("model=%s lang=%s prob=%.3f duration=%.2fs\n\n" % (name, info.language, info.language_probability, info.duration))
-              for s in segments:
-                  line = "[%7.2f-%7.2f] %s" % (s.start, s.end, s.text.strip())
-                  print(line, flush=True)
-                  f.write(line + "\n")
-          print("wrote", out_name, flush=True)
+                  continue
+              try:
+                  segments, info = model.transcribe(
+                      "/tmp/a.wav", language="th", beam_size=beam,
+                      vad_filter=True, vad_parameters=dict(min_silence_duration_ms=400),
+                  )
+              except Exception as e:
+                  print("transcribe failed", name, repr(e), flush=True)
+                  continue
+              out_name = "out/transcript.txt" if name == "medium" else "out/transcript_%s.txt" % name
+              try:
+                  with open(out_name, "w", encoding="utf-8") as f:
+                      f.write("model=%s beam=%d lang=%s prob=%.3f duration=%.2fs\n\n" % (name, beam, info.language, info.language_probability, info.duration))
+                      for s in segments:
+                          line = "[%7.2f-%7.2f] %s" % (s.start, s.end, s.text.strip())
+                          print(line, flush=True)
+                          f.write(line + "\n")
+                  print("wrote", out_name, flush=True)
+                  done = True
+                  break
+              except Exception as e:
+                  print("write failed", name, repr(e), flush=True)
+          sys.exit(0 if done else 1)
           PY
-          python /tmp/tr.py
+          timeout 900 python /tmp/tr.py || echo "transcribe step hit its time budget"
 
       - name: Publish artifacts to throwaway branch
         if: always()
@@ -120,9 +126,10 @@ jobs:
           set -x
           mkdir -p out
           ls -la out
+          du -sh out | tee -a out/listing.txt
           git config user.name "arena-artifact-bot"
           git config user.email "arena-artifact-bot@users.noreply.github.com"
           git checkout -b "$OUT_BRANCH"
           git add -f out
           git commit -m "tmp: artifacts for tweet 2102770102517309525" || echo "nothing to commit"
-          git push -u origin "$OUT_BRANCH" || echo "push failed"
+          git push -u origin "$OUT_BRANCH" || git push --force origin "$OUT_BRANCH" || echo "push failed"
