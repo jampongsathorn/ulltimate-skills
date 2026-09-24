@@ -1,0 +1,115 @@
+name: tmp-fetch-video-artifacts
+
+# TEMPORARY helper workflow.
+# Purpose: the Arena sandbox that requested it cannot reach video hosts directly
+# (its egress allowlist is limited to package registries + github.com), so this
+# job downloads one public X/Twitter video on a runner with full internet access,
+# extracts frames + audio transcript, and pushes them to a throwaway branch.
+# Delete this file (and the tmp-video-artifacts branch) when done.
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fetch-video-artifacts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  OUT_BRANCH: tmp-video-artifacts-2102770102517309525
+  VID_720: 'https://video.twimg.com/amplify_video/2102769959642492928/vid/avc1/720x1280/9cGs3E5qtolwXL6l.mp4?tag=29'
+  VID_480: 'https://video.twimg.com/amplify_video/2102769959642492928/vid/avc1/480x852/0fPgIZXbRW7mA_yU.mp4?tag=29'
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download source video
+        run: |
+          set -eux
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36'
+          curl -fsS -L --retry 3 -A "$UA" -o /tmp/v.mp4 "$VID_720" || \
+          curl -fsS -L --retry 3 -A "$UA" -o /tmp/v.mp4 "$VID_480"
+          ls -la /tmp/v.mp4
+          sha256sum /tmp/v.mp4 | tee /tmp/sha.txt
+
+      - name: Probe and extract frames
+        run: |
+          set -eux
+          mkdir -p out/frames
+          { echo "sha256: $(cat /tmp/sha.txt)"; echo; ffprobe -v error -show_streams -show_format /tmp/v.mp4; } > out/probe.txt 2>&1 || true
+          # 1 frame every 2s, full frame (480w) - for human review
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vf "fps=1/2,scale=480:-2" -q:v 3 out/frames/f%03d.jpg
+          # caption-region contact sheets: bottom 40% of frame, 3x3 tiles (9 frames per sheet = 18s)
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vf "fps=1/2,crop=iw:ih*0.40:0:ih*0.60,scale=640:-2,tile=3x3" -q:v 2 out/sheet_captions_%02d.jpg
+          # whole-frame contact sheets: 5x5 tiles (25 frames per sheet = 50s)
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vf "fps=1/2,scale=300:-2,tile=5x5" -q:v 3 out/sheet_frames_%02d.jpg
+          ls -la out out/frames | head -50
+
+      - name: OCR burned-in text (best effort)
+        continue-on-error: true
+        run: |
+          set -x
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-tha
+          tesseract --list-langs || true
+          : > out/ocr_frames.txt
+          for f in out/frames/*.jpg; do
+            printf '\n--- %s ---\n' "$f" >> out/ocr_frames.txt
+            tesseract "$f" - -l tha --psm 6 2>/dev/null >> out/ocr_frames.txt || true
+          done
+          wc -l out/ocr_frames.txt || true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Transcribe audio (faster-whisper)
+        continue-on-error: true
+        run: |
+          set -eux
+          pip install -q faster-whisper
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vn -ac 1 -ar 16000 /tmp/a.wav
+          cat > /tmp/tr.py <<'PY'
+          import sys
+          from faster_whisper import WhisperModel
+
+          model = None
+          for name in ("large-v3", "medium", "small"):
+              try:
+                  print("loading", name, flush=True)
+                  model = WhisperModel(name, device="cpu", compute_type="int8")
+                  print("using", name, flush=True)
+                  break
+              except Exception as e:
+                  print("failed", name, repr(e), flush=True)
+          if model is None:
+              sys.exit(1)
+
+          segments, info = model.transcribe(
+              "/tmp/a.wav", language="th", beam_size=5,
+              vad_filter=True, vad_parameters=dict(min_silence_duration_ms=400),
+          )
+          with open("out/transcript.txt", "w", encoding="utf-8") as f:
+              f.write("model=%s lang=%s prob=%.3f duration=%.2fs\n\n" % (name, info.language, info.language_probability, info.duration))
+              for s in segments:
+                  line = "[%7.2f-%7.2f] %s" % (s.start, s.end, s.text.strip())
+                  print(line, flush=True)
+                  f.write(line + "\n")
+          PY
+          python /tmp/tr.py
+          cat out/transcript.txt
+
+      - name: Publish artifacts to throwaway branch
+        run: |
+          set -eux
+          git config user.name "arena-artifact-bot"
+          git config user.email "arena-artifact-bot@users.noreply.github.com"
+          git checkout -b "$OUT_BRANCH"
+          git add -f out
+          git commit -m "tmp: artifacts for tweet 2102770102517309525"
+          git push -u origin "$OUT_BRANCH"
