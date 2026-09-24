@@ -32,17 +32,25 @@ python3 -m compileall skills/ -q
   - Path: `skills/agentic-code-workflow/SKILL.md`
   - Triggers: building features, slow work, incomplete fixes, new skills
 
-- **`grilling`** / **`grill-me`** — Relentless interview to sharpen a plan or design. Maps decisions as a design tree, asks frontier in rounds, waits for answers. Use before any non-trivial task to reach shared understanding.
-  - Path: `skills/grilling/SKILL.md` (implementation), `skills/grill-me/SKILL.md` (alias)
+- **`grilling`** / **`grill-me`** / **`grill-with-docs`** / **`domain-modeling`** — Relentless interview to sharpen a plan or design. Maps decisions as a design tree, asks frontier in rounds, waits for answers. `grill-with-docs` also creates ADRs and glossary via `domain-modeling`. Use before any non-trivial task to reach shared understanding.
+  - Path: `skills/grilling/SKILL.md` (core), `skills/grill-me/SKILL.md` (alias), `skills/grill-with-docs/SKILL.md` (grilling + docs), `skills/domain-modeling/SKILL.md` (glossary + ADRs)
   - Upstream: `mattpocock/skills` MIT, commit `c55ee46073ed923f86ce59a5eb3b6d895095d1b7`
-  - Triggers: "grill me", "stress test", planning, design
+  - Triggers: "grill me", "stress test", planning, design, CONTEXT.md, ADR
 
-### Bug Fixing (Group 1 focus)
+### Bug Fixing
 
 - **`bugfix-systematic`** — Systematic bug fixing that fixes root cause + all dependent files, not just one file. Enforces Reproduce → Root Cause Tree → Dependency Search → Fix Root → Fix All Impacted → Validate → Regression Guard. Stack generic JS/TS + Python. Use when bug fix is slow, incomplete, or fixes one file but breaks others.
   - Path: `skills/bugfix-systematic/SKILL.md`
   - Key commands: `rg -n "func"`, `npx madge --circular`, `python3 /tmp/reproduce.py`, `npm test`, `pytest`
   - Triggers: bug fix, dependency bug, incomplete fix, debugging endlessly
+
+### Trading & Statistics (Professor Level)
+
+- **`trading-stats-mindset`** — Think like a 10-year stats professor for time series trading strategy analysis. Forces Distribution > Point, Stationarity, Randomness, Sample size, Bias checks. Detects regime shifts, overfitting/walk-forward degradation, tail risk/drawdown clustering, win rate illusion. Includes decision tree (Theory/Heuristic/Trap), data mixing strategy, and Python script generating report + memo.
+  - Path: `skills/trading-stats-mindset/SKILL.md`
+  - Script: `skills/trading-stats-mindset/scripts/trading_stats_check.py --input data.csv --output report/`
+  - References: `references/professor-decision-tree.md`, `assets/report-template.md`
+  - Triggers: trading strategy analysis, time series behavior, statistical mindset, regime shift, overfitting, tail risk
 
 ### Skill Building
 
@@ -68,6 +76,20 @@ read_file skills/grilling/SKILL.md
 
 # 4. Follow bugfix-systematic 7 steps
 # → reproduce, root cause, impacted list, fix root, fix all, validate, regression
+```
+
+## Quick Start for Trading Stats Analysis (professor level)
+
+```bash
+# 1. Read professor mindset
+read_file skills/trading-stats-mindset/SKILL.md
+read_file skills/trading-stats-mindset/references/professor-decision-tree.md
+
+# 2. Run professor script on your data
+python3 skills/trading-stats-mindset/scripts/trading_stats_check.py --input trades.csv --pnl-col pnl --returns-col returns --output report/
+# Generates report/analysis-report.md + report/decision-memo.md
+
+# 3. Follow decision tree: Observation → Question → Test → Interpretation → Trading Decision
 ```
 
 ## Arena-Specific Rules (from experience)
