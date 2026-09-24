@@ -1,0 +1,8 @@
++ which ffmpeg ffprobe tesseract
+/usr/bin/ffmpeg
+/usr/bin/ffprobe
+/usr/bin/tesseract
++ ffmpeg -version
++ head -2
+ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers
+built with gcc 13 (Ubuntu 13.2.0-23ubuntu3)
