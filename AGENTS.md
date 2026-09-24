@@ -55,6 +55,16 @@ python3 -m compileall skills/ -q
   - Key commands: `rg -n "func"`, `npx madge --circular`, `python3 /tmp/reproduce.py`, `npm test`, `pytest`
   - Triggers: bug fix, dependency bug, incomplete fix, debugging endlessly
 
+### Agentic Mindset (use when the environment fights back)
+
+- **`agentic-resourcefulness-mindset`** — Think like a resourceful senior operator when a step is blocked: egress allowlists, missing binaries, expired tokens, sandboxes that reset and delete work, outputs you cannot verify. 5 mandatory moves (Probe → Cheapest path → Escalate → Triangulate → Persist & hand off), each with Theory/Heuristic/Trap, a decision tree, and priority behaviors P1–P4.
+  - Path: `skills/agentic-resourcefulness-mindset/SKILL.md`
+  - Script: `skills/agentic-resourcefulness-mindset/scripts/probe-environment.sh --out probe/capability-matrix.md` (binaries + egress + python modules → allowlist profile)
+  - Read when blocked: `references/escalation-ladder.md` (6 rungs: retry → alternate tool → registry-as-transport → alternate remote surface → CI relay → ask user; verification + cleanup contract)
+  - Final message template: `assets/handoff-template.md` (Status / Route / Evidence / Verification / Leftovers)
+  - Triggers: blocked network, SSLZeroReturnError, command not found, 401/403/429, "it's not possible", work lost between turns, borrowed compute, handoff to another session
+  - Pairs with: `understanding-video.md` (the full CI-relay walkthrough is PART 3 of that runbook)
+
 ### Trading & Statistics (Professor Level)
 
 - **`trading-stats-mindset`** — Think like a 10-year stats professor for time series trading strategy analysis. Forces Distribution > Point, Stationarity, Randomness, Sample size, Bias checks. Detects regime shifts, overfitting/walk-forward degradation, tail risk/drawdown clustering, win rate illusion. Includes decision tree (Theory/Heuristic/Trap), data mixing strategy, and Python script generating report + memo.
@@ -101,6 +111,26 @@ python3 skills/trading-stats-mindset/scripts/trading_stats_check.py --input trad
 # Generates report/analysis-report.md + report/decision-memo.md
 
 # 3. Follow decision tree: Observation → Question → Test → Interpretation → Trading Decision
+```
+
+## Quick Start for Blocked-Environment Work (egress / missing tools / resets)
+
+```bash
+# 1. Read the mindset
+read_file skills/agentic-resourcefulness-mindset/SKILL.md
+
+# 2. Probe before planning — one minute, saves whole cycles
+skills/agentic-resourcefulness-mindset/scripts/probe-environment.sh --out probe/capability-matrix.md --timeout 2
+#   → mirrors/allowlist profile: "registry-only allowlist" means pip/npm work, other hosts need a relay
+
+# 3. If blocked, climb the ladder (don't retry the same call, don't surrender)
+read_file skills/agentic-resourcefulness-mindset/references/escalation-ladder.md
+#   rung 3: registry-as-transport   pip install --user --break-system-packages imageio-ffmpeg
+#   rung 5: CI relay → full YAML in understanding-video.md PART 3; delete branch+workflow after
+
+# 4. Before the final message, use the handoff template
+read_file skills/agentic-resourcefulness-mindset/assets/handoff-template.md
+#   Status / Route taken / Evidence / Verification / Leftovers  ← never skip Leftovers
 ```
 
 ## Arena-Specific Rules (from experience)

@@ -11,6 +11,9 @@ Runbook: **"เข้าใจเนื้อหาวิดีโอจาก�
 ---
 
 
+> หลักการชุดนี้ถูกยกระดับเป็น skill ใช้ซ้ำได้แล้ว: **[`skills/agentic-resourcefulness-mindset/SKILL.md`](skills/agentic-resourcefulness-mindset/SKILL.md)**
+> (mindset + capability-probe script + escalation ladder + handoff template) — runbook นี้คือภาคปฏิบัติของ skill นั้น
+
 ## PART 0 — หลักการ 8 ข้อ (อ่านก่อน ไม่งั้นพลาดเหมือน session 1)
 
 1. PROBE ก่อนลงมือ — อย่าเดาว่าเน็ตเปิด/เครื่องมือมี ให้ทดสอบจริงก่อน (Step 0)

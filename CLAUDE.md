@@ -7,6 +7,7 @@ It also works in Arena AI via root `AGENTS.md` index — Arena has no auto-load,
 
 - `agentic-code-workflow` — 6-step systematic workflow (Scan → Grill → Plan → Implement → Validate → Document) for code agentic agents, dual-mode Claude Code + Arena
 - `bugfix-systematic` — 7-step bug fixing (Reproduce → Root Cause → Dep Search → Fix Root → Fix All → Validate → Regression), stack generic JS/TS + Python
+- `agentic-resourcefulness-mindset` — how to act when the environment fights back: probe before planning, cheapest path first, climb the escalation ladder (registry-as-transport → CI relay → ask user) instead of reporting "can't", triangulate & label uncertainty, persist work so resets don't erase it, hand off with leftovers — includes capability-probe script, escalation ladder reference, handoff template
 - `trading-stats-mindset` — professor-level statistical mindset for time series trading: 5 checks (Distribution, Stationarity, Randomness, Sample size, Bias) + 4 priorities (Regime shift, Overfitting, Tail risk, Win rate illusion), decision tree, Python script generating report+memo
 - `grilling` / `grill-me` / `grill-with-docs` / `domain-modeling` — relentless interview as design tree, frontier rounds, plus docs (ADRs, glossary) — vendored from mattpocock/skills
 - `skill-creator` — create/improve skills, evals, benchmarks (vendored from anthropics/claude-plugins-official)
