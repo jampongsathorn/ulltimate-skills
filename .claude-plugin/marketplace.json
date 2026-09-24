@@ -1,0 +1,21 @@
+{
+  "name": "ulltimate-skills",
+  "description": "Personal Claude Code skills library by jampongsathorn.",
+  "owner": {
+    "name": "jampongsathorn",
+    "url": "https://github.com/jampongsathorn"
+  },
+  "plugins": [
+    {
+      "name": "ulltimate-skills",
+      "description": "A growing collection of reusable Claude Code skills. Includes skill-creator for building, testing, and benchmarking new skills.",
+      "source": "./",
+      "category": "development",
+      "author": {
+        "name": "jampongsathorn",
+        "url": "https://github.com/jampongsathorn"
+      },
+      "homepage": "https://github.com/jampongsathorn/ulltimate-skills"
+    }
+  ]
+}

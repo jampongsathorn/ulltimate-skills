@@ -1,0 +1,10 @@
+{
+  "name": "ulltimate-skills",
+  "description": "A growing collection of reusable Claude Code skills. Includes skill-creator for building, testing, and benchmarking new skills.",
+  "author": {
+    "name": "jampongsathorn",
+    "url": "https://github.com/jampongsathorn"
+  },
+  "homepage": "https://github.com/jampongsathorn/ulltimate-skills",
+  "repository": "https://github.com/jampongsathorn/ulltimate-skills"
+}
