@@ -50,13 +50,18 @@ PART 1 — DECISION TREE
 PART 2 — ทำในเครื่อง (หลังมีไฟล์วิดีโอใน workspace)
 ================================================================================
 ตั้งค่าโฟลเดอร์ (convention ที่ใช้จริง):
-    video-analysis/
+    <repo>/video-analysis-workspace/
     ├── video-content-report.md      ← รายงานสุดท้าย
     ├── media/source_video.mp4, media/audio.mp3
     ├── frames/f001..f0NN.jpg        ← เฟรมทุก 2 วิ
     ├── contact-sheets/sheet_*.jpg   ← ตารางภาพ 10 เฟรม/แผ่น
     ├── transcripts/*.txt
     └── evidence/                    ← probe, ocr, audio_stats, logs
+
+⚠ ต้องวาง "ในรีโป" และตั้งชื่อลงท้ายด้วย -workspace เท่านั้น
+   เหตุผล (เจอจริง): ไฟล์ที่วางไว้นอกรีโป (เช่น /home/user/video-analysis/) **หายไประหว่างเทิร์น**
+   ส่วนรีโปถูก restore/re-clone ใหม่ ขณะที่ .gitignore ของ repo นี้มีกฎ `*-workspace/` อยู่แล้ว
+   ➜ ใช้ชื่อ `<อะไรก็ได้>-workspace/` = ไฟล์อยู่รอด snapshot และไม่ไปรก git
 
 STEP 2.1 — หา ffmpeg/ffprobe (เครื่อง sandbox มักไม่มี และ apt ถูกบล็อก)
     pip install -q --user --break-system-packages imageio-ffmpeg
@@ -286,10 +291,23 @@ STEP 3.5 — ดึง artifact กลับ (ใช้ git เท่านั�
     mkdir -p video-analysis/outN && git archive FETCH_HEAD out | tar -x -C video-analysis/outN --strip-components=1
     # ได้: source_video.mp4, frames/, sheet_*.jpg, transcripts/, ocr_raw.txt, audio_stats.txt, probe.txt, audio.mp3
 
-STEP 3.6 — เก็บกวาด
-    git rm .github/workflows/tmp-fetch-video-artifacts.yml && git commit -m "chore: remove temp workflow"
-    git push origin <BRANCH>                                      # ← ลบไฟล์ workflow
-    git push origin --delete tmp-video-artifacts-<N> (ทุก N)       # ← ลบ branch ทิ้ง (ไฟล์รวม ~20MB/ตัว)
+STEP 3.6 — เก็บกวาด (ลำดับสำคัญ: ดึง artifact กลับให้ครบ **ก่อน** ลบ branch)
+    git rm .github/workflows/tmp-fetch-video-artifacts.yml && git commit -m "chore: cleanup temp video-fetch workflow"
+    git push origin HEAD:<BRANCH>                                 # ← ลบไฟล์ workflow ออกจาก branch งาน
+    git push origin --delete tmp-video-artifacts-<N>               # ← ทีละ N (ไฟล์รวม ~20MB/ตัว)
+    git ls-remote --heads origin                                   # ← ยืนยันว่าเหลือแค่ main + branch งาน
+
+STEP 3.7 — ถ้า push ไม่ผ่าน / ต้อง rebase (เจอจริงหลัง workspace ถูก re-clone)
+    อาการ: `git push` ตอบ non-fast-forward (ไม่ใช่ auth error) = remote มี commit ที่ local ไม่รู้
+    สาเหตุ: workspace ถูกรีเซ็ตเป็น clone ใหม่ระหว่างเทิร์น — ประวัติ local หาย แต่ของบน remote อยู่ครบ
+    วิธีแก้:
+      git log --oneline -3                                  # ดูว่า local ถอยไปที่ main หรือยัง
+      git fetch origin '+refs/heads/<BRANCH>:refs/remotes/origin/<BRANCH>'
+      # (clone ใหม่มักตั้ง remote.origin.fetch แค่ main → refspec ตรง ๆ แบบนี้จำเป็น)
+      git rebase origin/<BRANCH>                            # replay งานใหม่ของเราทับของ remote
+      # ⚠ หลัง rebase ไฟล์ workflow ชั่วคราวจะ "กลับมา" → git rm อีกครั้งก่อน push
+      git push origin HEAD:<BRANCH>
+    บทเรียน: **งานของ session ควรถูก commit ให้เร็ว** ไม่ต้องรอ เพราะ local history ไม่การันตี
 
 
 ================================================================================
@@ -308,6 +326,10 @@ PART 4 — GOTCHAS ที่เจอจริง (ประหยัดเว�
 [x] ห้าม commit ไฟล์วิดีโอ 20MB เข้า main (โควตา snapshot ~128MB) ➜ อยู่แค่ branch ชั่วคราว
 [x] ขอ consent/แจ้ง user เมื่อใช้ repo ของเขาเป็น compute (ทำแล้วต้องลบให้สะอาด)
 [x] token ของ session อาจหมดอายุกลางงาน → **เช็คก่อนเริ่มงานยาว**: git ls-remote origin
+    (และถ้าพังกลางทาง: อย่าเงียบ — แจ้ง user ให้ reconnect GitHub แล้วค่อยเก็บกวาด)
+[x] workspace อาจถูก **re-clone ระหว่างเทิร์น** → local history หาย, remote ยังอยู่
+    ➜ commit งานให้เป็นระยะ, ใช้ `git rebase origin/<BRANCH>` เมื่อ push ได้ non-fast-forward
+    ➜ และวาง artifact ที่ต้องเก็บไว้ใน `<repo>/<name>-workspace/` (ดู STEP 3.6/3.7 + PART 2)
 [x] `read_file` อ่านภาพได้ → ใช้ contact sheet กวาดตาก่อน แล้วซูมเฉพาะเฟรมที่สงสัย (ประหยัด context)
 
 
@@ -339,12 +361,11 @@ PART 6 — QUICK TEMPLATE: copy-paste ให้ session ตัดสินใจ
 ภาคผนวก A — เคสตัวอย่างจริง (เอาไว้เทียบผล)
 ================================================================================
 งาน: https://x.com/Jessievariety13/status/2102770102517309525/video/1
-ผลลัพธ์: video-analysis/video-content-report.md
+ผลลัพธ์: video-analysis-workspace/video-content-report.md
 สรุปสิ่งที่ได้: คลิป ASMR เคลียร์ห้อง 1:39, voice-over หญิงเล่า "ทฤษฎีเดือนกันยายน =
 เริ่มต้นต่อ", ทำคอนเทนต์ 15 วันไม่หยุด, เป้าเคลียร์อีก 1 ล้านบาท, CTA เดือนหน้าเจอกัน,
 สินค้าในแคปชัน (ชั้นวางจานสแตนเลส) ไม่ปรากฏในภาพ, แคปชันบนจอเป็นข้อความเดิมทั้งคลิป
-สิ่งที่ต้องเก็บกวาดในเคสนี้: branch tmp-video-artifacts-2102770102517309525-{2,3,4,5}
-                              + workflow ที่ลบแล้วแต่ยัง push ไม่ได้ (token หมดอายุ 401)
+สิ่งที่ต้องเก็บกวาดในเคสนี้: ลบแล้วทั้งหมด (workflow + branch -3,-4,-5; -2 ไม่ถูกสร้าง)
 
 ================================================================================
 ภาคผนวก B — หมายเหตุความปลอดภัย/มารยาท
