@@ -8,6 +8,10 @@ installable plugin. Install it once, and every skill added to `skills/` shows up
 | Skill | What it does | Origin |
 | --- | --- | --- |
 | [`skill-creator`](skills/skill-creator/SKILL.md) | Build a new skill from scratch, improve an existing one, write test cases, run evals, benchmark with/without the skill, and optimise the description so it triggers reliably. | Vendored from [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) (Apache-2.0) — see [`UPSTREAM.md`](skills/skill-creator/UPSTREAM.md) |
+| [`agentic-code-workflow`](skills/agentic-code-workflow/SKILL.md) | Systematic 6-step workflow (Scan → Grill → Plan → Implement → Validate → Document) for code agentic agents to work like a senior engineer. Dual-mode Claude Code + Arena. Forces concrete commands, dependency search, and closing checklist. | Original — for Claude Code + Arena |
+| [`bugfix-systematic`](skills/bugfix-systematic/SKILL.md) | Systematic bug fixing that fixes root cause + all dependent files, not just one file. Enforces Reproduce → Root Cause Tree → Dependency Search → Fix Root → Fix All Impacted → Validate → Regression Guard. Stack generic JS/TS + Python. | Original — for Claude Code + Arena |
+| [`grilling`](skills/grilling/SKILL.md) | Grill the user relentlessly about a plan, decision, or idea. Maps as design tree, asks frontier in rounds, waits for answers. Use before any non-trivial task. | Vendored from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) — see [`UPSTREAM.md`](skills/grilling/UPSTREAM.md) |
+| [`grill-me`](skills/grill-me/SKILL.md) | Alias for grilling — trigger phrase users remember. Calls grilling skill. | Vendored from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) — see [`UPSTREAM.md`](skills/grill-me/UPSTREAM.md) |
 
 ## Install
 

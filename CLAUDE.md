@@ -1,6 +1,16 @@
 # Repo notes for Claude Code
 
 This repo is a personal library of Claude Code skills, published as a single installable plugin.
+It also works in Arena AI via root `AGENTS.md` index — Arena has no auto-load, so it reads `AGENTS.md` then `skills/<name>/SKILL.md`.
+
+## Skills in this repo (Group 1 — systematic work)
+
+- `agentic-code-workflow` — 6-step systematic workflow (Scan → Grill → Plan → Implement → Validate → Document) for code agentic agents, dual-mode Claude Code + Arena
+- `bugfix-systematic` — 7-step bug fixing (Reproduce → Root Cause → Dep Search → Fix Root → Fix All → Validate → Regression), stack generic JS/TS + Python
+- `grilling` / `grill-me` — relentless interview as design tree, frontier rounds (vendored from mattpocock/skills)
+- `skill-creator` — create/improve skills, evals, benchmarks (vendored from anthropics/claude-plugins-official)
+
+See `AGENTS.md` for Arena usage and full catalog.
 
 ## Adding a skill
 
@@ -8,6 +18,7 @@ This repo is a personal library of Claude Code skills, published as a single ins
   in the repo needs editing — no need to touch `.claude-plugin/marketplace.json` or `plugin.json`.
 - Prefer the `skill-creator` skill for anything non-trivial: it runs the draft → test → review → benchmark loop,
   and it can optimise the `description` for triggering at the end.
+- For systematic work, use `agentic-code-workflow` and `bugfix-systematic` as playbooks — they enforce concrete commands + closing checklist.
 - Quick scaffold: `tools/new-skill.sh <name>`, or copy `templates/skill-template/`.
 - Keep `SKILL.md` under ~500 lines. Push detail into `references/`, deterministic code into `scripts/`,
   output templates into `assets/`, and say when to read each one.
