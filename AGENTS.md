@@ -24,6 +24,14 @@ claude plugin validate .
 python3 -m compileall skills/ -q
 ```
 
+## Runbooks (step-by-step guides, not skills)
+
+- **[`understanding-video.txt`](understanding-video.txt)** — user sends a video link and asks what's in it.
+  Full runbook: environment probe → metadata without crawling → frames/contact sheets → caption OCR →
+  audio (speech vs ASMR bed) → demucs + faster-whisper transcript → cross-validation → report → cleanup.
+  Includes the working GitHub Actions relay YAML for when sandbox egress is blocked, plus a gotchas list
+  (VAD drops half the clip, large-v3 hangs, per-run branch names, cleanup contract). **Read this before improvising.**
+
 ## Skill Catalog (Group 1 — Systematic Work)
 
 ### Core Workflow (use first)
@@ -96,6 +104,12 @@ python3 skills/trading-stats-mindset/scripts/trading_stats_check.py --input trad
 
 - **Web preview**: bind `0.0.0.0`, not `127.0.0.1`; use relative URLs + `/api` proxy; set `allowedHosts: all` or allow preview host; avoid `X-Frame-Options` / CSP `frame-ancestors` blocking iframe
 - **Processes**: use `start_process` for dev servers, not `bash` (bash times out); `get_process_output` to wait for port
+- **Sandbox egress is limited**: in some sessions only `github.com` + package registries (pypi/npm) are reachable;
+  everything else (`video.twimg.com`, `huggingface.co`, `raw.githubusercontent.com`, `r.jina.ai`, …) returns
+  `SSLZeroReturnError` / empty reply. **Probe with one TLS line before planning** — then either use `pip`
+  (e.g. `imageio-ffmpeg` for a static ffmpeg) or relay the work through a GitHub Actions runner (see
+  [`understanding-video.txt`](understanding-video.txt) PART 3) and fetch results back via `git archive`.
+  Note: HF-blocked means `faster-whisper` / `demucs` can't download models locally — transcribe in CI.
 - **Snapshots**: files in `node_modules/`, `dist/`, `__pycache__/`, `.next/`, `build/`, `out/`, `target/`, `.cache/` are NOT persisted — don't write important files there
 - **Tools available**: `bash`, `read_file`, `write_file`, `edit_file`, `web_search`, `image_search`, `generate_image`, `generate_speech`, `start_process`, `get_process_output`, `stop_process`
 

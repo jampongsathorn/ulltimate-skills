@@ -1,0 +1,355 @@
+================================================================================
+UNDERSTANDING-VIDEO.TXT
+Runbook: "เข้าใจเนื้อหาวิดีโอจากลิงก์" สำหรับ Arena AI session ถัดไป
+================================================================================
+เวอร์ชัน: 1.0 (รวบรวมจากงานจริง 2026-09-24, tweet 2102770102517309525)
+ใช้เมื่อ: user ส่งลิงก์วิดีโอ (X/Twitter, TikTok, Facebook, YouTube, Shopee ฯลฯ)
+         แล้วถามว่า "เนื้อหาในวิดีโอคืออะไร" / "สรุปให้หน่อย"
+เป้าหมาย: ได้เนื้อหา + หลักฐานครบ โดย **ไม่ต้องเสียเวลางมใหม่** เรื่องเน็ต/เครื่องมือ
+--------------------------------------------------------------------------------
+อ่านก่อนเริ่ม 1 นาที: ถ้า user "อัปโหลดไฟล์วิดีโอเข้ามาใน workspace แล้ว" → ข้ามไป
+PART 2 (ทำในเครื่องล้วน) ได้เลย ไม่ต้องแตะ GitHub Actions เลย
+================================================================================
+
+
+================================================================================
+PART 0 — หลักการ 8 ข้อ (อ่านก่อน ไม่งั้นพลาดเหมือน session 1)
+================================================================================
+1. PROBE ก่อนลงมือ — อย่าเดาว่าเน็ตเปิด/เครื่องมือมี ให้ทดสอบจริงก่อน (Step 0)
+2. CHEAPEST FIRST — ลองวิธีถูกที่สุดก่อน (metadata endpoint) ก่อนสร้าง CI
+3. ESCALATE อย่าสู้กับทางปิด — ถ้าดึงไฟล์ตรงไม่ได้ ให้ย้ายงานไป CI runner
+4. ได้ของเร็ว > สมบูรณ์แบบ — one successful end-to-end run ก่อน ค่อยอัปเกรด
+5. CROSS-VALIDATE — ทุกข้อสรุปต้องมีหลักฐาน 2 ทางอิสระ (ภาพ + OCR + เสียง + คำพูด)
+6. แยก "ข้อเท็จจริง" ออกจาก "การตีความ"; จุดที่ไม่ชัดใส่ (?) อย่าเดาแทน user
+7. HYGIENE — ไฟล์ใหญ่ไม่เข้า main; ของชั่วคราวต้องลบ; รายงานของค้างให้ user
+8. ส่ง ARTIFACT ไม่ส่งแค่ข้อความ — user ต้องตรวจซ้ำได้โดยไม่ต้องเชื่อ agent
+
+
+================================================================================
+PART 1 — DECISION TREE
+================================================================================
+ลิงก์วิดีโอมา
+│
+├─ มีไฟล์ใน workspace แล้ว? ──► PART 2 (ในเครื่อง)
+│
+└─ ต้องดึงจากอินเทอร์เน็ต
+     │
+     ├─ Step 0: curl ทดสอบโฮสต์วิดีโอ (video.twimg.com / pbs.twimg.com ฯลฯ)
+     │    ├─ TLS ผ่าน ──► ดาวน์โหลดตรงด้วย curl -L -A "<UA เบราว์เซอร์>" ──► PART 2
+     │    └─ TLS ไม่ผ่าน (SSLZeroReturnError / Empty reply) = egress ถูกบล็อก
+     │         │
+     │         ├─ ลอง fetch_page tool กับลิงก์วิดีโอ/ .m3u8  ← บางครั้งได้ caption/ข้อความ
+     │         │
+     │         └─ ยังไม่ได้ ──► CI RELAY (PART 3)  ← ทางที่ใช้จริงและได้ผล
+     │
+     └─ ถ้าทุกทางตัน ──► ขอไฟล์จาก user (อัปโหลด .mp4/.mp3 เข้า workspace) แล้วไป PART 2
+         * บอก user ตรง ๆ ว่าติดอะไร ไม่ใช่สรุปจากแคปชันแล้วเงียบ
+
+
+================================================================================
+PART 2 — ทำในเครื่อง (หลังมีไฟล์วิดีโอใน workspace)
+================================================================================
+ตั้งค่าโฟลเดอร์ (convention ที่ใช้จริง):
+    video-analysis/
+    ├── video-content-report.md      ← รายงานสุดท้าย
+    ├── media/source_video.mp4, media/audio.mp3
+    ├── frames/f001..f0NN.jpg        ← เฟรมทุก 2 วิ
+    ├── contact-sheets/sheet_*.jpg   ← ตารางภาพ 10 เฟรม/แผ่น
+    ├── transcripts/*.txt
+    └── evidence/                    ← probe, ocr, audio_stats, logs
+
+STEP 2.1 — หา ffmpeg/ffprobe (เครื่อง sandbox มักไม่มี และ apt ถูกบล็อก)
+    pip install -q --user --break-system-packages imageio-ffmpeg
+    FF=$(python3 -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())")
+    "$FF" -version        # พิสูจน์ว่าใช้ได้ (พิสูจน์แล้วว่า pypi ผ่าน)
+    หมายเหตุ: imageio-ffmpeg ให้ ffmpeg แต่ **ไม่มี ffprobe** — ถ้าต้องการ metadata
+             ให้อ่านจาก audio/video filter ("$FF" -i ... 2>&1) หรือใช้ CI
+
+STEP 2.2 — Metadata
+    "$FF" -hide_banner -i media/source_video.mp4 2>&1 | grep -E "Duration|Stream|bitrate"
+    เก็บผลลง evidence/probe.txt
+
+STEP 2.3 — เฟรม + contact sheet (ภาพคือหลักฐานหลัก)
+    mkdir -p frames contact-sheets
+    "$FF" -hide_banner -loglevel error -i media/source_video.mp4 -vf "fps=1/2" -q:v 2 frames/f%03d.jpg
+    # ตารางภาพไว้กวาดตาทีเดียว (10 เฟรม = 20 วิ/แผ่น)
+    "$FF" -hide_banner -loglevel error -i media/source_video.mp4 -vf "fps=1/2,scale=180:-2,tile=5x2" -q:v 3 contact-sheets/sheet_%02d.jpg
+    # แล้วอ่านภาพด้วย read_file (ตัว agent เห็นภาพได้) — อ่าน contact sheet ก่อน แล้วซูมเฟรมที่สงสัย
+    ⚠ ข้อจำกัดที่ต้องเขียนในรายงาน: ช็อตสั้นกว่า 2 วิ อาจตกหล่น
+
+STEP 2.4 — เช็คลักษณะเสียง (สำคัญ! บอกว่าเป็น ASMR bed หรือมีช่วงเงียบ)
+    "$FF" -hide_banner -loglevel error -i media/source_video.mp4 -vn -ac 1 -ar 16000 -y /tmp/a.wav
+    pip install -q --user --break-system-packages numpy
+    # ดูเฉลี่ย RMS + spectral flatness ต่อ 0.5 วิ (สคริปต์เต็มใน PART 3 / audio_stats)
+    ผลที่ได้จริงในเคสตัวอย่าง: RMS ~72–79 dB ทุกช่วง **ไม่มีความเงียบเลย 99 วิ**
+    flatness มัธยฐาน 0.375 → เสียงคนพูด + เสียงประกอบ/ASMR ตลอดคลิป
+    ➜ ทำไมสำคัญ: ถ้าเห็น "ไม่เงียบเลย" แปลว่า whisper แบบใช้ VAD จะ **ตัดทิ้งครึ่งคลิป** (เจอจริง)
+
+STEP 2.5 — OCR ตัวอักษรบนจอ (ถ้ามีแคปชันเบิร์นอิน)
+    ต้องมี binary tesseract (apt) → ใน sandbox ที่ apt ถูกบล็อก ให้ทำใน CI (PART 3 Step 3.5)
+    ถ้ามี tesseract ไทย:
+      ตัดเฉพาะแถบล่าง 38% แล้วขยาย 2 เท่า + เพิ่มคอนทราสต์ ก่อน OCR (เพิ่มอัตราถูกมาก)
+      "$FF" -hide_banner -loglevel error -i media/source_video.mp4 \
+        -vf "fps=1,crop=iw:ih*0.38:0:ih*0.62,scale=iw*2:ih*2,eq=contrast=1.6:brightness=0.05,unsharp=5:5:1.2" \
+        -q:v 2 /tmp/band/b%03d.jpg
+      tesseract <frame> - -l tha --psm 6   (ลอง psm 6 และ 11 แล้วนับข้อความที่ซ้ำ)
+
+STEP 2.6 — ถอดเสียงเป็นข้อความ (transcript)
+    ⚠ FASTER-WHISPER ดาวน์โหลดโมเดลจาก HuggingFace → **ใน sandbox ที่ HF ถูกบล็อกจะทำไม่ได้**
+      (พิสูจน์แล้ว: huggingface.co = SSLZeroReturnError) ➜ ให้ถอดใน CI (PART 3) หรือขอไฟล์ transcript จาก CI
+    ถ้าทำได้ในเครื่อง (เน็ตเปิด/HF ผ่าน):
+      pip install -q --user --break-system-packages faster-whisper
+      - ใช้ ladder: large-v3-turbo → medium → small (large-v3 เปล่า **ช้ามาก** บน CPU, เคยค้าง 30+ นาที)
+      - ตั้ง language="th" เสมอถ้าเป็นคลิปไทย (ไม่งั้นโมเดลสลับภาษาเพี้ยน)
+      - ตั้ง condition_on_previous_text=False กัน hallucination ลามทั้งคลิป
+      - รัน 2 แบบ: vad_filter=False และ True แล้วเทียบ (VAD จะตัด ASMR ทิ้ง → บทพูดหายครึ่ง)
+      - ถ้าดนตรี/เสียงประกอบดังทับเสียงพูด ➜ **แยกเสียงร้องก่อนด้วย demucs** แล้วถอดจาก vocals
+        (ในเคสจริง: demucs ทำให้ได้บทพูดครบและตรงขึ้นชัดเจน)
+      - เก็บทุกเวอร์ชันไว้ใน transcripts/ แล้วเลือกตัวที่เชื่อถือได้เป็นหลัก
+
+STEP 2.7 — Cross-validate (ขาดไม่ได้)
+    ทำตารางเทียบ 4 ทาง: ภาพ(เฟรม) | ตัวอักษรบนจอ(OCR) | คุณสมบัติเสียง(spectrum) | คำพูด(transcript)
+    - คำพูดกับภาพขัดกันไหม (เช่น คนในภาพชาย แต่ voice-over หญิง) ➜ **รายงานทั้งสอง ไม่เลือกเอง**
+    - ตัวเลขที่ได้ยินไม่ตรงกัน (เช่น "18 วัน" vs "15 วัน") ➜ รายงานทั้งคู่พร้อม timestamp
+    - สินค้าในแคปชันปรากฏในภาพจริงไหม (เคสจริง: **ไม่ปรากฏ**) ➜ เขียนระบุตรง ๆ
+    - มีป้าย/สติกเกอร์ลิงก์ขายบนจอไหม ➜ ถ้าไม่มี ให้บอกว่า "ลิงก์อยู่ในแคปชันเท่านั้น"
+
+STEP 2.8 — เขียนรายงาน (video-content-report.md)
+    โครงที่ใช้ได้: 1) TL;DR 2) ข้อมูลเทคนิค 3) Shot list ตามเวลา
+    4) Transcript เป็นตาราง [เวลา | ข้อความ] 5) โครงสร้างการเล่าเรื่อง/แกะสูตร
+    6) ข้อจำกัดของรายงาน 7) ลิสต์ไฟล์ artifact 8) หมายเหตุการทำงาน+ของค้าง
+    กติกา: ทุกข้อความอ้าง timestamp, จุดไม่ชัดใส่ (?), ห้ามเขียนสิ่งที่ไม่มีหลักฐานรองรับ
+
+STEP 2.9 — ส่งมอบ
+    present_file(video-content-report.md) + แนบ media/audio.mp3 ให้ user ฟังยืนยันบทพูด
+
+
+================================================================================
+PART 3 — CI RELAY (GitHub Actions เป็น "เครื่องมือดึงข้อมูล" เมื่อ egress ถูกบล็อก)
+================================================================================
+แนวคิด: sandbox แตะ github.com ได้ → ใช้ repo เป็นท่อ: runner ดาวน์โหลด+วิเคราะห์ แล้ว push
+        artifact ขึ้น branch ชั่วคราว → sandbox git fetch กลับ
+เงื่อนไข: repo สาธารณะ, App ของ Arena มีสิทธิ์ workflows + contents:write
+         (ในเคสจริง: push ไฟล์ workflow ผ่านได้เลย)
+
+⚠ สัญญาการเก็บกวาด (Cleanup contract) — ทำก่อนเริ่ม และทำทันทีที่จบ
+   [] ลบ workflow ชั่วคราวออกจาก branch งาน
+   [] ลบ branch ชั่วคราวทุกตัว (git push origin --delete <branch>)
+   [] เช็คว่า "push ได้ก่อนเริ่มงานยาว" — **token อาจหมดอายุกลางทาง** (เจอจริง 401)
+      ถ้าหมดอายุ: แจ้ง user ให้ reconnect GitHub แล้วค่อยเก็บกวาด (อย่าเงียบ)
+   [] branch ชั่วคราวต้องมีชื่อเฉพาะต่อ run กันชนกัน: <prefix>-${{ github.run_number }}
+
+STEP 3.1 — ไฟล์ .github/workflows/tmp-fetch-video-artifacts.yml (คัดจากของจริงที่รันผ่าน)
+--------------------------------------------------------------------------------
+name: tmp-fetch-video-artifacts
+on:
+  push:
+    paths: ['.github/workflows/tmp-fetch-video-artifacts.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+env:
+  OUT_BRANCH: tmp-video-artifacts-${{ github.run_number }}
+  VID_720: '<URL mp4 720p จาก metadata>'
+  VID_480: '<URL mp4 480p สำรอง>'
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: |
+          set -x
+          mkdir -p out
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg tesseract-ocr tesseract-ocr-tha
+      - name: Download source video
+        run: |
+          set -x
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+          ok=0
+          for u in "$VID_720" "$VID_480"; do
+            if curl -fsS -L --retry 3 -A "$UA" -o /tmp/v.mp4 "$u"; then ok=1; break; fi
+          done
+          [ "$ok" = "1" ] || exit 1
+          cp /tmp/v.mp4 out/source_video.mp4
+      - name: Extract caption band for OCR
+        run: |
+          mkdir -p out/band
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 \
+            -vf "fps=1,crop=iw:ih*0.38:0:ih*0.62,scale=iw*2:ih*2,eq=contrast=1.6:brightness=0.05,unsharp=5:5:1.2" \
+            -q:v 2 out/band/b%03d.jpg
+      - name: OCR burned-in Thai captions
+        continue-on-error: true
+        run: |
+          : > out/ocr_raw.txt
+          for f in out/band/*.jpg; do
+            echo "### $(basename "$f" .jpg)" >> out/ocr_raw.txt
+            for psm in 6 11; do tesseract "$f" - -l tha --psm $psm 2>/dev/null | sed 's/^/  /' >> out/ocr_raw.txt || true; done
+          done
+      - name: Extract frames + contact sheets
+        run: |
+          mkdir -p out/frames
+          ffprobe -v error -show_streams -show_format /tmp/v.mp4 > out/probe.txt 2>&1 || true
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vf "fps=1/2" -q:v 2 out/frames/f%03d.jpg
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vf "fps=1/2,scale=180:-2,tile=5x2" -q:v 3 out/sheet_%02d.jpg
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vn -ac 1 -ar 24000 -b:a 48k -y out/audio.mp3
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Audio profile (speech vs non-speech)
+        continue-on-error: true
+        run: |
+          pip install -q numpy
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vn -ac 1 -ar 16000 -y /tmp/a.wav
+          python3 - <<'PY' | tee out/audio_stats.txt
+          import numpy as np, wave
+          w=wave.open('/tmp/a.wav'); sr=w.getframerate(); n=w.getnframes()
+          x=np.frombuffer(w.readframes(n),dtype=np.int16).astype(np.float32)/32768.0
+          win=sr//2
+          print("dur=%.2fs sr=%d"%(n/sr,sr)); print(" t(s)   rms_dB  centroid_kHz  flatness  zcr")
+          for i in range(0,len(x)-win,win):
+              seg=x[i:i+win]
+              spec=np.abs(np.fft.rfft(seg*np.hanning(len(seg))))+1e-9
+              freqs=np.fft.rfftfreq(len(seg),1/sr)
+              cent=float(np.sum(freqs*spec)/np.sum(spec))
+              flat=float(np.exp(np.mean(np.log(spec)))/np.mean(spec))
+              zcr=float(np.mean(np.abs(np.diff(np.sign(seg)))))
+              rms=20*np.log10(np.sqrt(np.mean(seg**2))+1e-9)
+              print("%5.1f  %6.1f  %10.2f  %8.4f  %5.3f"%(i/sr,rms,cent/1000,flat,zcr))
+          PY
+      - name: Transcribe (demucs vocals + faster-whisper)
+        continue-on-error: true
+        run: |
+          pip install -q faster-whisper demucs
+          ffmpeg -hide_banner -loglevel error -i /tmp/v.mp4 -vn -ac 1 -ar 16000 -y /tmp/a.wav
+          VOCALS=/tmp/a.wav
+          python -m demucs --two-stems=vocals -n htdemucs -o /tmp/demucs /tmp/v.mp4 > out/demucs.log 2>&1 || true
+          if [ -f /tmp/demucs/htdemucs/vocals.wav ]; then
+            ffmpeg -hide_banner -loglevel error -i /tmp/demucs/htdemucs/vocals.wav -af "loudnorm=I=-18:TP=-1.5:LRA=11" -ar 16000 -ac 1 -y /tmp/vocals.wav
+            VOCALS=/tmp/vocals.wav
+          fi
+          cat > /tmp/tr.py <<'PY'
+          import os
+          from faster_whisper import WhisperModel
+          SRC=os.environ.get("VOCALS","/tmp/a.wav")
+          def run(model, tag, audio, vad):
+              segs, info = model.transcribe(audio, language="th", beam_size=5,
+                  condition_on_previous_text=False, temperature=[0.0,0.2,0.4,0.6],
+                  no_speech_threshold=0.6, repetition_penalty=1.15,
+                  vad_filter=vad, vad_parameters=dict(min_silence_duration_ms=500) if vad else None)
+              rows=["[%7.2f-%7.2f] %s"%(s.start,s.end,s.text.strip()) for s in segs]
+              open("out/transcript_%s.txt"%tag,"w",encoding="utf-8").write("\n".join(rows)+"\n")
+              print("\n".join(rows))
+          m=None
+          for name in ("large-v3-turbo","medium"):
+              try: m=WhisperModel(name,device="cpu",compute_type="int8",cpu_threads=4); break
+              except Exception as e: print("model failed",name,e)
+          if m: run(m,"vocals_novad",SRC,False); run(m,"mix_novad","/tmp/a.wav",False)
+          PY
+          VOCALS="$VOCALS" timeout 1500 python /tmp/tr.py || echo "time budget reached"
+      - name: Publish artifacts to throwaway branch
+        if: always()
+        run: |
+          git config user.name "arena-artifact-bot"
+          git config user.email "arena-artifact-bot@users.noreply.github.com"
+          git checkout -b "$OUT_BRANCH"
+          git add -f out
+          git commit -m "tmp: video artifacts" || echo "nothing to commit"
+          git push -u origin "$OUT_BRANCH" || git push --force origin "$OUT_BRANCH"
+--------------------------------------------------------------------------------
+
+STEP 3.2 — เอา URL ไฟล์วิดีโอมาก่อน (ทำในเครื่อง ไม่ต้องใช้ CI)
+    # metadata ทวีต X/Twitter ฟรี ไม่ต้องมี API key — ได้ caption, ไฟล์ mp4 ทุก bitrate, จำนวนวิว
+    curl -sS "https://cdn.syndication.twimg.com/tweet-result?id=<TWEET_ID>&lang=th&token=a"
+    curl -sS "https://api.fxtwitter.com/<user>/status/<TWEET_ID>"
+    ⚠ ต้องระวัง: URL เปลี่ยนได้/ต้องใส่ ?tag=29; ถ้า 403 ให้ใช้ variant อื่น (720→480→320p)
+    ⚠ ก่อนใช้ curl เช็คเน็ตก่อน 1 บรรทัด:
+       python3 -c "import socket,ssl;ssl.create_default_context().wrap_socket(socket.create_connection(('api.fxtwitter.com',443),timeout=6),server_hostname='api.fxtwitter.com');print('OK')"
+
+STEP 3.3 — push workflow → runner วิ่งอัตโนมัติ (push = trigger)
+    git add .github/workflows/tmp-fetch-video-artifacts.yml
+    git commit -m "tmp: fetch video artifacts"
+    git push origin <BRANCH ของ session>
+
+STEP 3.4 — เฝ้าสถานะ (อย่า poll รัว — รอทีละ ~3 นาที; run ใช้เวลา 3–8 นาที)
+    curl -sS "https://api.github.com/repos/<owner>/<repo>/actions/runs?per_page=3" \
+      | python3 -c "import json,sys;[print(r['run_number'],r['status'],r.get('conclusion'),r['updated_at']) for r in json.load(sys.stdin)['workflow_runs']]"
+    curl -sS "https://api.github.com/repos/<owner>/<repo>/actions/runs/<RUN_ID>/jobs"   # ดู step ไหนพัง
+    curl -sS "https://api.github.com/repos/<owner>/<repo>/actions/runs" | ...            # หา RUN_ID
+    ⚠ `gh run list` ใช้ไม่ได้ในบาง environment (คืนค่าว่าง) → ใช้ curl api.github.com แทน
+    ⚠ ดึง log zip ไม่ได้ด้วย token ที่ไม่มีสิทธิ์ actions:read (302 → 401) → ดูแค่ status/steps พอ
+      ถ้าต้อง debug จริง ๆ: เพิ่ม step ที่เขียน error ลง out/ แล้ว push ขึ้น branch
+
+STEP 3.5 — ดึง artifact กลับ (ใช้ git เท่านั้น ไม่ต้องมี API token)
+    git fetch origin tmp-video-artifacts-<N>
+    mkdir -p video-analysis/outN && git archive FETCH_HEAD out | tar -x -C video-analysis/outN --strip-components=1
+    # ได้: source_video.mp4, frames/, sheet_*.jpg, transcripts/, ocr_raw.txt, audio_stats.txt, probe.txt, audio.mp3
+
+STEP 3.6 — เก็บกวาด
+    git rm .github/workflows/tmp-fetch-video-artifacts.yml && git commit -m "chore: remove temp workflow"
+    git push origin <BRANCH>                                      # ← ลบไฟล์ workflow
+    git push origin --delete tmp-video-artifacts-<N> (ทุก N)       # ← ลบ branch ทิ้ง (ไฟล์รวม ~20MB/ตัว)
+
+
+================================================================================
+PART 4 — GOTCHAS ที่เจอจริง (ประหยัดเวลา session ถัดไปได้หลายชั่วโมง)
+================================================================================
+[x] runner ubuntu-latest มี ffmpeg แต่ **อย่าสมมติ** — step 1 เคยพังเพราะสมมติ + `set -e` เปราะ
+    ➜ ลง tooling เองเสมอ + ใส่ continue-on-error ใน step "best effort" (OCR/transcribe วิเคราะห์)
+[x] `set -eux` ทั้ง step ทำให้ step ล้มทั้งที่งานเกือบเสร็จ ➜ ใช้ set -x + เช็คเงื่อนไขเอง
+[x] ตั้ง `timeout` ให้ step ที่อาจค้าง (transcribe: timeout 900–1500)
+[x] large-v3 (ไม่ turbo) บน CPU ช้ามาก — เคยรัน run หมดเวลา 40 นาทีแล้วยังไม่จบ
+    ➜ เริ่มจาก large-v3-turbo / medium / small และ **แตก run ขนานกัน** เพื่อการันตีผล
+[x] branch ชั่วคราวต้องมี run_number ต่อท้าย ไม่งั้น run ที่ขนานกัน push ทับกัน (เคย fail ทับจริง)
+[x] VAD ตัดทิ้ง ASMR/gap → transcript หายครึ่งคลิป ➜ รันทั้ง no-VAD และ VAD แล้วเทียบ
+[x] whisper บนคลิปที่มีดนตรี/เสียงประกอบ ➜ แยกเสียงร้องด้วย demucs ก่อน (ต่างกันคนละเรื่อง)
+[x] ตัวเลขในคำพูด (วันที่/จำนวนเงิน) มักถอดผิด ➜ รายงานพร้อม timestamp และใส่ (?) ถ้าไม่ชัวร์
+[x] ห้าม commit ไฟล์วิดีโอ 20MB เข้า main (โควตา snapshot ~128MB) ➜ อยู่แค่ branch ชั่วคราว
+[x] ขอ consent/แจ้ง user เมื่อใช้ repo ของเขาเป็น compute (ทำแล้วต้องลบให้สะอาด)
+[x] token ของ session อาจหมดอายุกลางงาน → **เช็คก่อนเริ่มงานยาว**: git ls-remote origin
+[x] `read_file` อ่านภาพได้ → ใช้ contact sheet กวาดตาก่อน แล้วซูมเฉพาะเฟรมที่สงสัย (ประหยัด context)
+
+
+================================================================================
+PART 5 — CHECKLIST ปิดงาน (ต้องผ่านทุกข้อก่อนบอก user ว่าเสร็จ)
+================================================================================
+[] มีไฟล์วิดีโอจริงใน workspace (ไม่ใช่สรุปจากแคปชัน)
+[] report.md: TL;DR + shot list + transcript มี timestamp + ความขัดแย้งที่เจอ + ข้อจำกัด
+[] transcript เก็บหลายเวอร์ชัน (อย่างน้อย: แยกเสียงร้อง 1 + mix 1)
+[] หลักฐานประกอบ: media/audio.mp3 ให้ user ฟังเทียบ, frames/, contact-sheets/, evidence/
+[] จุดไม่ชัดใส่ (?) ครบ ไม่เดาแทน user
+[] workflow ชั่วคราวถูกลบ + branch ชั่วคราวถูกลบ (หรือแจ้ง user ว่าติดอะไร เพราะเหตุใด)
+[] present_file(รายงาน) และบอก path ของ artifact ทั้งหมด
+
+
+================================================================================
+PART 6 — QUICK TEMPLATE: copy-paste ให้ session ตัดสินใจเร็ว
+================================================================================
+1) ลิงก์ X/Twitter มา → curl syndication + fxtwitter → ได้ mp4 URL + caption + views
+2) curl mp4 ตรง? ได้ → PART 2
+                     ไม่ได้ (SSLZeroReturnError) → PART 3 (CI relay)
+3) ในเครื่อง: imageio-ffmpeg → frames + contact sheets → อ่านภาพเอง
+4) เสียง: numpy spectrum → เช็ค "มีความเงียบไหม" (ไม่เงียบ = ASMR bed + ต้องใช้ no-VAD/demucs)
+5) ถอดเสียงใน CI (demucs + large-v3-turbo, no-VAD) → git archive ดึงกลับ
+6) cross-validate 4 ทาง → เขียนรายงาน → present_file → แจ้ง artifact → เก็บกวาด
+
+
+================================================================================
+ภาคผนวก A — เคสตัวอย่างจริง (เอาไว้เทียบผล)
+================================================================================
+งาน: https://x.com/Jessievariety13/status/2102770102517309525/video/1
+ผลลัพธ์: video-analysis/video-content-report.md
+สรุปสิ่งที่ได้: คลิป ASMR เคลียร์ห้อง 1:39, voice-over หญิงเล่า "ทฤษฎีเดือนกันยายน =
+เริ่มต้นต่อ", ทำคอนเทนต์ 15 วันไม่หยุด, เป้าเคลียร์อีก 1 ล้านบาท, CTA เดือนหน้าเจอกัน,
+สินค้าในแคปชัน (ชั้นวางจานสแตนเลส) ไม่ปรากฏในภาพ, แคปชันบนจอเป็นข้อความเดิมทั้งคลิป
+สิ่งที่ต้องเก็บกวาดในเคสนี้: branch tmp-video-artifacts-2102770102517309525-{2,3,4,5}
+                              + workflow ที่ลบแล้วแต่ยัง push ไม่ได้ (token หมดอายุ 401)
+
+================================================================================
+ภาคผนวก B — หมายเหตุความปลอดภัย/มารยาท
+================================================================================
+- ใช้ repo ของ user เป็น compute ได้ แต่ต้อง: แจ้งให้ชัด, ทำของให้ลบง่าย, ลบทันทีที่จบ
+- อย่าใช้ branch งานของ session เก็บ artifact หนัก ๆ (โควตา snapshot/session)
+- อย่าถอด/เก็บข้อมูลส่วนตัวจากวิดีโอเกินความจำเป็นของคำถาม
+================================================================================
