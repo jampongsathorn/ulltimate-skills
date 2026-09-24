@@ -414,6 +414,31 @@ git ในเครื่องถอยกลับไป main (commit ที�
    (พิมพ์ `git ls-remote --heads origin | grep tmp` แล้วคัดลอก SHA เก็บไว้)
 5. หลัง reset: `git checkout -B <BRANCH> origin/<BRANCH>` เพื่อกลับมาอยู่บนงานที่ push ไว้
 
+### 7.1 สองรูปแบบของ reset (เจอจริงทั้งคู่)
+
+| รูปแบบ | อาการ | งานที่หาย | วิธีแก้ |
+| --- | --- | --- | --- |
+| **Full wipe** | โฟลเดอร์นอกรีโปหายหมด (เช่น `video-analysis/`), ไฟล์ ignored หาย | ไฟล์ใน working tree | กู้จาก branch/SHA ถ้าเคย push ไว้ |
+| **Git ref reset** | `git log` ถอยไป `main`, แต่ไฟล์ใน working tree **ยังอยู่** (รวมไฟล์ `??` untracked) | commit ที่ยังไม่ push + index | ดูสูตรด้านล่าง — งานที่ค้างใน working tree ไม่หาย |
+
+**สูตรกู้เมื่อ git ถอยไป main แต่ไฟล์ยังอยู่** (ใช้จริงและได้ผล — งานที่ stage ไว้รอด):
+
+```bash
+# 1) ดึงทุก branch จาก remote (clone ใหม่อาจตั้ง refspec แค่ main)
+git fetch origin '+refs/heads/*:refs/remotes/origin/*'
+
+# 2) เลื่อน branch กลับไปที่ tip ของเรา โดย "ไม่แตะ working tree และ index"
+git reset --soft origin/<BRANCH>
+
+# 3) ตรวจว่า index ตรงกับ working tree แล้ว stage ใหม่ให้ครบ
+git status --short
+git add -A
+git diff --cached --diff-filter=D --name-only   # ต้องว่าง — เช็คก่อน commit ว่าไม่มีไฟล์ถูกลบพลาด
+```
+
+> ทางเลือกที่ปลอดภัยกว่าเล็กน้อยถ้าไม่มั่นใจ index: `git stash -u` → `git checkout -B <BRANCH> origin/<BRANCH>`
+> → `git stash pop` แล้วค่อย add/commit
+
 ## ภาคผนวก A — เคสตัวอย่างจริง (เอาไว้เทียบผล)
 
 งาน: https://x.com/Jessievariety13/status/2102770102517309525/video/1

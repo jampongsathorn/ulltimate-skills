@@ -143,6 +143,13 @@ read_file skills/agentic-resourcefulness-mindset/assets/handoff-template.md
   (e.g. `imageio-ffmpeg` for a static ffmpeg) or relay the work through a GitHub Actions runner (see
   [`understanding-video.md`](understanding-video.md) PART 3) and fetch results back via `git archive`.
   Note: HF-blocked means `faster-whisper` / `demucs` can't download models locally — transcribe in CI.
+- **Git state resets between turns**: the branch can silently fall back to `main` while working-tree files survive
+  (a full wipe can also delete untracked/ignored files outright — three resets happened in one day). Recover with
+  `git fetch origin '+refs/heads/*:refs/remotes/origin/*'` then `git reset --soft origin/<BRANCH>` (staged work survives),
+  re-`git add -A`, and verify with `git diff --cached --diff-filter=D --name-only` before committing. Full recipes:
+  [`understanding-video.md`](understanding-video.md) PART 7 (durability).
+- **Commit early, push often**: uncommitted work does not exist. Text artifacts → tracked folder (`analyses/<date>-<slug>/`);
+  heavy media → gitignored `*-workspace/` (best-effort, re-fetchable). See skill `agentic-resourcefulness-mindset`.
 - **Snapshots**: files in `node_modules/`, `dist/`, `__pycache__/`, `.next/`, `build/`, `out/`, `target/`, `.cache/` are NOT persisted — don't write important files there
 - **Tools available**: `bash`, `read_file`, `write_file`, `edit_file`, `web_search`, `image_search`, `generate_image`, `generate_speech`, `start_process`, `get_process_output`, `stop_process`
 

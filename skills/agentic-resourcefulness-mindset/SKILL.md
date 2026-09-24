@@ -137,8 +137,15 @@ scratch branch holding the artifacts was deleted *before* the text output was co
 
 **Heuristic:**
 
-- **Commit and push early and often.** Safety is `origin`, not the working tree. A local branch that has
-  pushed commits can always be rebuilt (`git checkout -B <branch> origin/<branch>`).
+- **Commit and push early and often.** Safety is `origin`, not the working tree. Two reset shapes show up in
+  practice: a *full wipe* (untracked/ignored files vanish — recover only from pushed commits) and a *git ref
+  reset* (`git log` falls back to `main` while working-tree files survive). For the second kind, keep the work:
+
+```bash
+git fetch origin '+refs/heads/*:refs/remotes/origin/*'   # a fresh clone may only track main
+git reset --soft origin/<BRANCH>                          # move the ref, leave index + working tree alone
+git add -A && git diff --cached --diff-filter=D --name-only   # must be empty before you commit
+```
 - **Two artifact tiers:**
   - *must survive* → small text (report, transcripts, logs, evidence) committed to a tracked folder,
     e.g. `analyses/<date>-<slug>/`
