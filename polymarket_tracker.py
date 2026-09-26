@@ -1734,7 +1734,154 @@ def print_market_group_performance_cli(res: Dict[str, Any], group_by: str = "gro
     print("=" * 140)
 
 
-# ── 10. CLI Entry Point ────────────────────────────────────────────────────────
+# ── 10. Trader Activity & Liveness Scanner ─────────────────────────────────────
+
+def check_wallet_activity(wallet: str, username: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Inspect real-time trading pulse for a wallet to determine if the trader is actively trading.
+    """
+    w = wallet.strip().lower()
+    url = f"https://data-api.polymarket.com/activity?user={w}&limit=100"
+    acts = make_request(url)
+    
+    if username is None:
+        u_url = f"https://data-api.polymarket.com/v1/leaderboard?user={w}&timePeriod=ALL"
+        u_data = make_request(u_url)
+        if u_data and isinstance(u_data, list) and len(u_data) > 0:
+            username = u_data[0].get("userName") or u_data[0].get("pseudonym") or w[:10]
+        else:
+            username = w[:10]
+
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    
+    if not acts or not isinstance(acts, list) or len(acts) == 0:
+        return {
+            "name": username,
+            "wallet": w,
+            "status": "🔴 INACTIVE",
+            "last_active_str": "Never / No Feed",
+            "last_ts": 0,
+            "days_ago": 9999.0,
+            "trades_24h": 0,
+            "trades_7d": 0,
+            "trades_30d": 0,
+            "active_group": "None",
+            "last_market": "None"
+        }
+
+    trades = [a for a in acts if a.get("type") in ["TRADE", "BUY", "SELL"] or a.get("side")]
+    if not trades:
+        trades = acts
+
+    last_ts = trades[0].get("timestamp") or 0
+    diff_sec = max(0, now_ts - last_ts)
+    diff_days = diff_sec / 86400.0
+    diff_hours = diff_sec / 3600.0
+    diff_mins = diff_sec / 60.0
+
+    if diff_mins < 60:
+        time_str = f"{int(diff_mins)}m ago"
+    elif diff_hours < 24:
+        time_str = f"{diff_hours:.1f}h ago"
+    elif diff_days < 30:
+        time_str = f"{int(diff_days)}d ago"
+    else:
+        time_str = f"{int(diff_days)}d ago ({diff_days/30.4:.1f}mo)"
+
+    t_24h = sum(1 for a in trades if (now_ts - (a.get("timestamp") or 0)) <= 86400)
+    t_7d = sum(1 for a in trades if (now_ts - (a.get("timestamp") or 0)) <= 7 * 86400)
+    t_30d = sum(1 for a in trades if (now_ts - (a.get("timestamp") or 0)) <= 30 * 86400)
+
+    # Liveness classification
+    if diff_days <= 2 or t_7d >= 5:
+        status = "🟢 ACTIVE"
+    elif diff_days <= 14 or t_30d >= 1:
+        status = "🟡 COOLING"
+    else:
+        status = "🔴 INACTIVE"
+
+    last_title = trades[0].get("title") or trades[0].get("question") or "Market"
+    last_slug = trades[0].get("slug") or ""
+    grp = extract_slug_group(last_slug, "", last_title)
+
+    return {
+        "name": username,
+        "wallet": w,
+        "status": status,
+        "last_active_str": time_str,
+        "last_ts": last_ts,
+        "days_ago": diff_days,
+        "trades_24h": t_24h,
+        "trades_7d": t_7d,
+        "trades_30d": t_30d,
+        "active_group": grp,
+        "last_market": last_title
+    }
+
+
+def scan_active_traders(
+    wallets: Optional[List[str]] = None,
+    timeframe: str = "ALL",
+    category: str = "OVERALL",
+    limit: int = 15
+) -> List[Dict[str, Any]]:
+    """Scan and rank trader liveness across a candidate pool or the official leaderboard."""
+    candidates = []
+    if wallets and len(wallets) > 0:
+        for w in wallets:
+            candidates.append({"wallet": w, "name": w[:10]})
+    else:
+        leaders = fetch_leaderboard(time_period=timeframe, limit=limit if limit > 15 else 25, category=category)
+        for l in leaders:
+            w_addr = l.get("proxyWallet") or l.get("proxy_wallet") or ""
+            u_name = l.get("userName") or l.get("user_name") or w_addr[:10]
+            if w_addr:
+                candidates.append({
+                    "wallet": w_addr,
+                    "name": u_name,
+                    "pnl": l.get("pnl", 0),
+                    "vol": l.get("vol", 0)
+                })
+
+    results = []
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_cand = {executor.submit(check_wallet_activity, c["wallet"], c.get("name")): c for c in candidates}
+        for future in as_completed(future_to_cand):
+            try:
+                res = future.result()
+                if res:
+                    c = future_to_cand[future]
+                    res["pnl"] = c.get("pnl", 0)
+                    res["vol"] = c.get("vol", 0)
+                    results.append(res)
+            except Exception:
+                pass
+
+    # Sort by active status first, then by most recent timestamp descending
+    results = sorted(results, key=lambda x: (0 if "🟢" in x["status"] else (1 if "🟡" in x["status"] else 2), -x["last_ts"]))
+    return results
+
+
+def print_activity_scan_cli(results: List[Dict[str, Any]]) -> None:
+    print("=" * 140)
+    print("  ⚡ POLYMARKET TRADER LIVENESS & ACTIVITY SCANNER (STEP 2: IS TRADER ACTIVE?)")
+    print(f"  Scanned: {len(results)} Traders | Filter Rule: 🟢 Active (<48h or >=5 trades/7d) | 🟡 Cooling (3-14d) | 🔴 Inactive (>14d)")
+    print("=" * 140)
+    header = f"{'Trader Name':<22} | {'Wallet / Profile Link':<42} | {'Status':<12} | {'Last Active':<14} | {'24H':<4} | {'7D':<4} | {'30D':<4} | {'Active Market / Category'}"
+    print(header)
+    print("-" * 140)
+
+    for r in results:
+        w_short = r["wallet"]
+        lm = f"[{r['active_group']}] {r['last_market']}"[:45]
+        print(f"{r['name'][:22]:<22} | {w_short:<42} | {r['status']:<12} | {r['last_active_str']:<14} | {r['trades_24h']:<4} | {r['trades_7d']:<4} | {r['trades_30d']:<4} | {lm}")
+
+    print("=" * 140)
+    print("  💡 PIPELINE: ① Trader Alpha Quality → ② Liveness Scanner (Here) → ③ Copyability & Orderbook Execution")
+    print("=" * 140)
+
+
+# ── 11. CLI Entry Point ────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="Polymarket 3-Dimensional Quantitative Engine & Rolling Walk-Forward Tracker")
@@ -1742,6 +1889,7 @@ def main():
     # Target
     parser.add_argument("--wallet", type=str, default="", help="Proxy wallet address (0x...) to analyze")
     parser.add_argument("--screen", "--screen-top", action="store_true", help="Run multi-trader quantitative screening across market families")
+    parser.add_argument("--active-traders", "--check-activity", "--activity-scanner", action="store_true", help="Scan and verify if traders are actively trading right now (Liveness Gate)")
     parser.add_argument("--market-performance", "--group-analytics", "--group-stats", action="store_true", help="Analyze macro performance, volume, and settlement bias across Market Groups and Timeframes")
     parser.add_argument("--group-by", choices=["group", "month", "week", "day", "date", "date-only", "month-only"], default="group", help="Aggregation level for market performance analysis (default: group)")
     parser.add_argument("--leaderboard", action="store_true", help="Display top traders leaderboard")
@@ -1775,6 +1923,19 @@ def main():
 
     if args.meta_backtest:
         run_meta_backtest_cli()
+    elif args.active_traders:
+        if args.wallet:
+            act_res = [check_wallet_activity(args.wallet)]
+        else:
+            act_res = scan_active_traders(
+                timeframe=args.timeframe,
+                category=args.category,
+                limit=args.limit
+            )
+        if args.json:
+            print(json.dumps(act_res, indent=2))
+        else:
+            print_activity_scan_cli(act_res)
     elif args.market_performance:
         res = analyze_market_group_performance(
             start_date=args.start_date,
