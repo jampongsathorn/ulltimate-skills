@@ -1882,119 +1882,59 @@ def print_activity_scan_cli(results: List[Dict[str, Any]]) -> None:
     print("=" * 140)
 
 
-# ── 11. Universal Strategy Reverse Engineer & Hypothesis Falsification Engine ──
+# ── 11. Universal Strategy Reverse Engineer & Empirical Falsification Engine ──
 
-class BaseMarketAdapter:
-    def __init__(self, name: str):
-        self.name = name
+# ── 1. Contract Time & Duration Parser ─────────────────────────────────────────
 
-    def extract_context(self, trade: Dict[str, Any]) -> Dict[str, Any]:
-        return {"context_available": False, "adapter": self.name}
+def parse_contract_time_bounds(title: str, slug: str, trade_ts: int) -> Tuple[Optional[int], Optional[int], str]:
+    """
+    Extract the true start timestamp, end timestamp, and duration of a Polymarket contract.
+    Supports:
+    - 5m / 15m micro intervals (e.g. '8:45AM-9:00AM ET')
+    - 4-Hour blocks (e.g. '12:00PM-4:00PM ET')
+    - Daily contracts (e.g. 'September 26')
+    - Monthly / Annual contracts
+    """
+    t_clean = f"{title} {slug}".lower()
+    
+    # 1. Match explicit intraday interval (e.g. "12:00pm-4:00pm et" or "8:45am-9:00am et")
+    m = re.search(r"(\d{1,2}):(\d{2})\s*(am|pm)\s*-\s*(\d{1,2}):(\d{2})\s*(am|pm)", t_clean)
+    if m:
+        h1, m1, p1, h2, m2, p2 = m.groups()
+        t1_min = (int(h1) % 12 + (12 if p1.lower() == "pm" else 0)) * 60 + int(m1)
+        t2_min = (int(h2) % 12 + (12 if p2.lower() == "pm" else 0)) * 60 + int(m2)
+        if t2_min <= t1_min:
+            t2_min += 24 * 60 # crosses midnight
+        duration_sec = (t2_min - t1_min) * 60
+        
+        # Estimate interval start/end anchored to trade date
+        dt = datetime.fromtimestamp(trade_ts, tz=timezone.utc)
+        start_anchor = trade_ts - (trade_ts % duration_sec)
+        end_anchor = start_anchor + duration_sec
+        interval_type = f"Intraday Block ({duration_sec // 60}m)"
+        return start_anchor, end_anchor, interval_type
 
-    def evaluate_hypothesis_fit(self, fingerprint: Dict[str, Any], trades: List[Dict[str, Any]]) -> Dict[str, float]:
-        return {}
+    # 2. Daily contract
+    if "on september" in t_clean or "on october" in t_clean or re.search(r"\b2026-\d{2}-\d{2}\b", t_clean):
+        duration_sec = 86400
+        start_anchor = trade_ts - (trade_ts % 86400)
+        end_anchor = start_anchor + 86400
+        return start_anchor, end_anchor, "Daily Contract (24h)"
 
-
-class CryptoContextAdapter(BaseMarketAdapter):
-    def __init__(self):
-        super().__init__("Crypto & Micro-Duration Spot Alignment")
-
-    def evaluate_hypothesis_fit(self, fingerprint: Dict[str, Any], trades: List[Dict[str, Any]]) -> Dict[str, float]:
-        scores = {}
-        late_pct = fingerprint.get("late_candle_pct", 0)
-        high_prob_pct = fingerprint.get("high_prob_pct", 0)
-        single_sided_pct = fingerprint.get("single_sided_pct", 0)
-        mid_prob_pct = fingerprint.get("mid_prob_pct", 0)
-        deep_val_pct = fingerprint.get("deep_value_pct", 0)
-
-        scores["H1_LateStage_LatencySniping"] = (late_pct * 0.45) + (high_prob_pct * 0.35) + (single_sided_pct * 0.20)
-        scores["H2_Directional_Momentum"] = (mid_prob_pct * 0.6) + (single_sided_pct * 0.4)
-        scores["H4_MarketMaking"] = (100.0 - single_sided_pct) * 0.9
-        scores["H5_DeepValue_Longshot"] = deep_val_pct * 0.9
-        return scores
-
-
-class WeatherContextAdapter(BaseMarketAdapter):
-    def __init__(self):
-        super().__init__("Atmospheric & Meteorological Ensemble")
-
-    def evaluate_hypothesis_fit(self, fingerprint: Dict[str, Any], trades: List[Dict[str, Any]]) -> Dict[str, float]:
-        scores = {}
-        deep_val_pct = fingerprint.get("deep_value_pct", 0)
-        high_prob_pct = fingerprint.get("high_prob_pct", 0)
-        multi_bracket_ratio = fingerprint.get("multi_bracket_events_pct", 0)
-        single_sided_pct = fingerprint.get("single_sided_pct", 0)
-
-        scores["H3_Forecast_Bracket_Arbitrage"] = (multi_bracket_ratio * 0.45) + (high_prob_pct * 0.35) + (deep_val_pct * 0.20)
-        scores["H1_LateStage_LatencySniping"] = (high_prob_pct * 0.6) + (single_sided_pct * 0.2)
-        scores["H5_DeepValue_Longshot"] = deep_val_pct * 0.85
-        scores["H2_Directional_Momentum"] = fingerprint.get("mid_prob_pct", 0) * 0.5
-        return scores
+    # 3. Default fallback
+    return None, None, "Multi-Day / Long Horizon"
 
 
-class SportsContextAdapter(BaseMarketAdapter):
-    def __init__(self):
-        super().__init__("In-Play Sports Live Score & Odds Alignment")
-
-    def evaluate_hypothesis_fit(self, fingerprint: Dict[str, Any], trades: List[Dict[str, Any]]) -> Dict[str, float]:
-        scores = {}
-        late_pct = fingerprint.get("late_candle_pct", 0)
-        high_prob_pct = fingerprint.get("high_prob_pct", 0)
-        scores["H1_LateStage_LatencySniping"] = (late_pct * 0.5) + (high_prob_pct * 0.5)
-        scores["H2_Directional_Momentum"] = fingerprint.get("mid_prob_pct", 0) * 0.7
-        return scores
-
-
-class PoliticsContextAdapter(BaseMarketAdapter):
-    def __init__(self):
-        super().__init__("Political Polling & Discrete Event Alignment")
-
-    def evaluate_hypothesis_fit(self, fingerprint: Dict[str, Any], trades: List[Dict[str, Any]]) -> Dict[str, float]:
-        scores = {}
-        mid_prob_pct = fingerprint.get("mid_prob_pct", 0)
-        scores["H2_Directional_Momentum"] = mid_prob_pct * 0.7 + fingerprint.get("single_sided_pct", 0) * 0.3
-        scores["H5_DeepValue_Longshot"] = fingerprint.get("deep_value_pct", 0) * 0.8
-        return scores
-
-
-class GeneralContextAdapter(BaseMarketAdapter):
-    def __init__(self):
-        super().__init__("Universal Baseline (Unanchored Novel Markets)")
-
-    def evaluate_hypothesis_fit(self, fingerprint: Dict[str, Any], trades: List[Dict[str, Any]]) -> Dict[str, float]:
-        scores = {}
-        scores["H1_LateStage_LatencySniping"] = fingerprint.get("high_prob_pct", 0) * 0.8
-        scores["H5_DeepValue_Longshot"] = fingerprint.get("deep_value_pct", 0) * 0.8
-        scores["H2_Directional_Momentum"] = fingerprint.get("mid_prob_pct", 0) * 0.7
-        return scores
-
-
-def get_market_adapter(slug_group: str) -> BaseMarketAdapter:
-    if slug_group in ["btc-price", "eth-price", "crypto-updown"]:
-        return CryptoContextAdapter()
-    elif slug_group in ["highest-temp", "lowest-temp", "precipitation-weather"]:
-        return WeatherContextAdapter()
-    elif slug_group.startswith("sports-"):
-        return SportsContextAdapter()
-    elif slug_group in ["us-politics", "fed-rates"]:
-        return PoliticsContextAdapter()
-    else:
-        return GeneralContextAdapter()
-
+# ── 2. Universal Strategy Reverse Engineer Pipeline ────────────────────────────
 
 def reverse_engineer_trader_strategy(wallet: str, max_trades: int = 500) -> Dict[str, Any]:
-    """
-    9-Stage Universal Reverse-Engineering Pipeline:
-    Ingests raw orders, extracts deterministic fingerprints, falsifies competing hypotheses,
-    and returns a structured strategy blueprint with strict epistemic boundaries.
-    """
     w = wallet.strip().lower()
 
     # 1. Fetch raw trade activity
     url_act = f"{BASE_DATA_API}/activity?user={w}&limit={max_trades}"
     activities = make_request(url_act) or []
 
-    # 2. Fetch ground truth
+    # 2. Fetch ground truth profile
     u_url = f"{BASE_DATA_API}/v1/leaderboard?user={w}&timePeriod=ALL"
     u_data = make_request(u_url) or []
     username = u_data[0].get("userName") or u_data[0].get("pseudonym") or w[:10] if u_data else w[:10]
@@ -2006,18 +1946,17 @@ def reverse_engineer_trader_strategy(wallet: str, max_trades: int = 500) -> Dict
         trades = activities
 
     if not trades:
-        return {
-            "wallet": w,
-            "username": username,
-            "error": "No trading activity found for this wallet."
-        }
+        return {"wallet": w, "username": username, "error": "No trading activity found for this wallet."}
 
-    # ① Trade Reconstruction & Primary Market Detection
-    market_counts = defaultdict(int)
+    # Sort chronological
+    trades = sorted(trades, key=lambda x: x.get("timestamp") or 0)
+    n_trades = len(trades)
+
+    # ── STAGE A: DETERMINISTIC FEATURE & FINGERPRINT EXTRACTION ───────────────
     group_counts = defaultdict(int)
     prices = []
     sizes_usdc = []
-    minute_offsets = []
+    normalized_progress_list = [] # tau in [0, 1]
     trades_per_market = defaultdict(list)
     monthly_trades = defaultdict(list)
 
@@ -2025,14 +1964,11 @@ def reverse_engineer_trader_strategy(wallet: str, max_trades: int = 500) -> Dict
         slug = t.get("slug") or ""
         title = t.get("title") or t.get("question") or "Market"
         grp = extract_slug_group(slug, "", title)
-        side = t.get("side") or "BUY"
-        outcome = t.get("outcome") or "-"
         price = float(t.get("price") or 0)
         size = float(t.get("size") or 0)
         usdc = float(t.get("usdcSize") or (price * size))
         ts = t.get("timestamp") or 0
 
-        market_counts[title] += 1
         group_counts[grp] += 1
         trades_per_market[slug].append(t)
         
@@ -2040,7 +1976,12 @@ def reverse_engineer_trader_strategy(wallet: str, max_trades: int = 500) -> Dict
             dt = datetime.fromtimestamp(ts, tz=timezone.utc)
             m_key = dt.strftime("%Y-%m")
             monthly_trades[m_key].append(t)
-            minute_offsets.append(ts % 300) # 5m modulo
+            
+            # Compute true time progress tau
+            t_start, t_end, _ = parse_contract_time_bounds(title, slug, ts)
+            if t_start and t_end and t_end > t_start:
+                tau = max(0.0, min(1.0, (ts - t_start) / (t_end - t_start)))
+                normalized_progress_list.append(tau)
 
         if price > 0:
             prices.append(price)
@@ -2048,31 +1989,45 @@ def reverse_engineer_trader_strategy(wallet: str, max_trades: int = 500) -> Dict
             sizes_usdc.append(usdc)
 
     primary_group = max(group_counts.items(), key=lambda x: x[1])[0] if group_counts else "other"
-    primary_group_pct = (group_counts[primary_group] / len(trades) * 100) if trades else 0.0
+    primary_group_pct = (group_counts[primary_group] / n_trades * 100) if n_trades else 0.0
     sample_slug = trades[0].get("slug", "")
-    sample_q = trades[0].get("title", "")
-    primary_structure = classify_market_structure(primary_group, sample_slug, sample_q)
+    sample_title = trades[0].get("title", "")
+    primary_structure = classify_market_structure(primary_group, sample_slug, sample_title)
 
-    # ② Quantitative Fingerprint (Deterministic Math Layer)
-    n_trades = len(trades)
-    deep_val = sum(1 for p in prices if p < 0.20)
-    mid_prob = sum(1 for p in prices if 0.20 <= p <= 0.80)
-    high_prob = sum(1 for p in prices if p > 0.80)
+    # Price distributions
+    mean_price = statistics.mean(prices) if prices else 0.5
+    median_price = statistics.median(prices) if prices else 0.5
+    deep_val_count = sum(1 for p in prices if p < 0.20)
+    mid_prob_count = sum(1 for p in prices if 0.20 <= p <= 0.80)
+    high_prob_count = sum(1 for p in prices if p > 0.80)
 
-    deep_val_pct = (deep_val / len(prices) * 100) if prices else 0.0
-    mid_prob_pct = (mid_prob / len(prices) * 100) if prices else 0.0
-    high_prob_pct = (high_prob / len(prices) * 100) if prices else 0.0
+    deep_val_pct = (deep_val_count / len(prices) * 100) if prices else 0.0
+    mid_prob_pct = (mid_prob_count / len(prices) * 100) if prices else 0.0
+    high_prob_pct = (high_prob_count / len(prices) * 100) if prices else 0.0
 
-    # Candle phases
-    early_candle = sum(1 for s in minute_offsets if s < 60)
-    mid_candle = sum(1 for s in minute_offsets if 60 <= s < 240)
-    late_candle = sum(1 for s in minute_offsets if s >= 240)
-    sniping_30s = sum(1 for s in minute_offsets if s >= 270)
+    # Timing distributions (True progress tau)
+    late_cycle_count = sum(1 for tau in normalized_progress_list if tau >= 0.70)
+    late_cycle_pct = (late_cycle_count / len(normalized_progress_list) * 100) if normalized_progress_list else 0.0
+    mid_cycle_count = sum(1 for tau in normalized_progress_list if 0.20 <= tau < 0.70)
+    mid_cycle_pct = (mid_cycle_count / len(normalized_progress_list) * 100) if normalized_progress_list else 0.0
 
-    late_candle_pct = (late_candle / len(minute_offsets) * 100) if minute_offsets else 0.0
-    sniping_30s_pct = (sniping_30s / len(minute_offsets) * 100) if minute_offsets else 0.0
+    # Sequential order escalation (Empirical Probe -> Sweep verification)
+    probe_sweep_count = 0
+    total_consecutive_pairs = 0
+    for slug, m_trades in trades_per_market.items():
+        m_sorted = sorted(m_trades, key=lambda x: x.get("timestamp") or 0)
+        for i in range(len(m_sorted) - 1):
+            total_consecutive_pairs += 1
+            t1, t2 = m_sorted[i], m_sorted[i+1]
+            dt_pair = (t2.get("timestamp") or 0) - (t1.get("timestamp") or 0)
+            u1 = float(t1.get("usdcSize") or 0)
+            u2 = float(t2.get("usdcSize") or 0)
+            if dt_pair <= 60 and u1 < 50 and u2 >= 5 * u1 and u2 >= 200:
+                probe_sweep_count += 1
 
-    # Single vs Dual sidedness
+    probe_sweep_freq_pct = (probe_sweep_count / total_consecutive_pairs * 100) if total_consecutive_pairs else 0.0
+
+    # Market directionality
     single_sided_mkts = 0
     dual_sided_mkts = 0
     multi_bracket_events = 0
@@ -2089,123 +2044,153 @@ def reverse_engineer_trader_strategy(wallet: str, max_trades: int = 500) -> Dict
     single_sided_pct = (single_sided_mkts / tot_mkts * 100) if tot_mkts else 100.0
     multi_bracket_events_pct = (multi_bracket_events / tot_mkts * 100) if tot_mkts else 0.0
 
-    fingerprint = {
-        "n_trades": n_trades,
-        "primary_group": primary_group,
-        "primary_structure": primary_structure,
-        "mean_price": statistics.mean(prices) if prices else 0.5,
-        "median_price": statistics.median(prices) if prices else 0.5,
-        "mean_size_usdc": statistics.mean(sizes_usdc) if sizes_usdc else 0.0,
-        "median_size_usdc": statistics.median(sizes_usdc) if sizes_usdc else 0.0,
-        "max_size_usdc": max(sizes_usdc) if sizes_usdc else 0.0,
-        "deep_value_pct": deep_val_pct,
-        "mid_prob_pct": mid_prob_pct,
-        "high_prob_pct": high_prob_pct,
-        "late_candle_pct": late_candle_pct,
-        "sniping_30s_pct": sniping_30s_pct,
-        "single_sided_pct": single_sided_pct,
-        "multi_bracket_events_pct": multi_bracket_events_pct
-    }
-
-    # ③ Context Adapter Selection
-    adapter = get_market_adapter(primary_group)
-    hypothesis_scores = adapter.evaluate_hypothesis_fit(fingerprint, trades)
-
-    # ④ Hypotheses Falsification & Evidence Scoring
+    # ── STAGE B & C: COMPETING HYPOTHESES & EMPIRICAL FALSIFICATION ───────────
     hypotheses = []
 
-    # H1: Late-Stage Expiry / Latency Sniping
-    h1_score = hypothesis_scores.get("H1_LateStage_LatencySniping", (late_candle_pct * 0.45) + (high_prob_pct * 0.35) + (single_sided_pct * 0.20))
-    h1_counter = max(0.0, 100.0 - h1_score)
+    # H1: Late-Cycle High-Certainty Expiry Sniping
+    # Predictions: tau >= 0.70 AND price > 0.75 (or price < 0.25 on NO)
+    h1_matches = 0
+    h1_violations = 0
+    for t in trades:
+        p = float(t.get("price") or 0)
+        out = (t.get("outcome") or "").lower()
+        # High certainty is either YES at > 0.75 or NO/Down at > 0.75
+        is_high_certainty = (p >= 0.75)
+        if is_high_certainty:
+            h1_matches += 1
+        elif 0.35 <= p <= 0.65:
+            h1_violations += 1
+
+    h1_coverage = (h1_matches / n_trades * 100) if n_trades else 0.0
+    h1_counter = (h1_violations / n_trades * 100) if n_trades else 0.0
     hypotheses.append({
         "id": "H1",
-        "name": "Late-Stage Expiry & Cross-Market Discrepancy Sniping",
-        "score": min(98.0, h1_score),
-        "counter_pct": round(h1_counter * 0.25, 1),
-        "description": "Waits until external underlying outcome is highly certain near candle/event expiration, then sweeps mispriced high-probability contracts."
+        "name": "Late-Cycle High-Certainty Expiry Sniping",
+        "coverage_pct": round(h1_coverage, 1),
+        "counter_pct": round(h1_counter, 1),
+        "test_rule": "Enters when contract price >= $0.75 (high certainty near resolution)",
+        "empirical_fit": round(h1_coverage * 0.7 + (late_cycle_pct if normalized_progress_list else high_prob_pct) * 0.3, 1)
     })
 
-    # H2: Directional Momentum / Information Drift
-    h2_score = hypothesis_scores.get("H2_Directional_Momentum", (mid_prob_pct * 0.6) + (single_sided_pct * 0.4))
+    # H2: Mid-Cycle Directional Information / Trend Drift Reaction
+    # Predictions: 0.20 <= tau <= 0.70 AND 0.25 <= price <= 0.75
+    h2_matches = sum(1 for p in prices if 0.25 <= p <= 0.75)
+    h2_violations = sum(1 for p in prices if p > 0.85 or p < 0.15)
+    h2_coverage = (h2_matches / n_trades * 100) if n_trades else 0.0
+    h2_counter = (h2_violations / n_trades * 100) if n_trades else 0.0
     hypotheses.append({
         "id": "H2",
-        "name": "Directional Information Flow & Momentum Reaction",
-        "score": min(95.0, h2_score),
-        "counter_pct": round((100.0 - h2_score) * 0.3, 1),
-        "description": "Enters during active market formation reacting to ongoing trend breaks or live news updates."
+        "name": "Mid-Cycle Directional Information & Trend Drift Reaction",
+        "coverage_pct": round(h2_coverage, 1),
+        "counter_pct": round(h2_counter, 1),
+        "test_rule": "Enters during price formation ($0.25 - $0.75) tracking emerging information",
+        "empirical_fit": round(h2_coverage * 0.7 + mid_prob_pct * 0.3, 1)
     })
 
-    # H3: Forecast Revision & Multi-Bracket Dispersion
-    h3_score = hypothesis_scores.get("H3_Forecast_Bracket_Arbitrage", (multi_bracket_events_pct * 0.45) + (high_prob_pct * 0.35) + (deep_val_pct * 0.20))
+    # H3: Multi-Bracket Forecast / Tail Dispersion Arbitrage
+    h3_matches = sum(len(m_trades) for slug, m_trades in trades_per_market.items() if len(m_trades) >= 3)
+    h3_coverage = (h3_matches / n_trades * 100) if n_trades else 0.0
+    h3_counter = (100.0 - h3_coverage)
     hypotheses.append({
         "id": "H3",
-        "name": "Ensemble Forecast Revision & Multi-Bracket Discrepancy",
-        "score": min(98.0, h3_score),
-        "counter_pct": round((100.0 - h3_score) * 0.25, 1),
-        "description": "Evaluates physical/probabilistic models to systematically buy underpriced tail brackets across multi-outcome events."
+        "name": "Multi-Bracket Dispersion & Forecast Revision Coverage",
+        "coverage_pct": round(h3_coverage, 1),
+        "counter_pct": round(h3_counter, 1),
+        "test_rule": "Accumulates multiple mutually-exclusive brackets within the same underlying event",
+        "empirical_fit": round((multi_bracket_events_pct * 0.6) + (deep_val_pct * 0.4), 1)
     })
 
-    # H4: Market Making / Spread Capture
-    h4_score = (100.0 - single_sided_pct) * 0.95
+    # H4: Automated Liquidity Provision & Spread Capture
+    h4_matches = sum(len(m_trades) for slug, m_trades in trades_per_market.items() if len({x.get("outcome") for x in m_trades}) > 1)
+    h4_coverage = (h4_matches / n_trades * 100) if n_trades else 0.0
+    h4_counter = (100.0 - h4_coverage)
     hypotheses.append({
         "id": "H4",
-        "name": "Automated Liquidity Provision & Spread Capture",
-        "score": min(95.0, h4_score),
-        "counter_pct": round(single_sided_pct * 0.8, 1),
-        "description": "Places simultaneous dual-sided limit orders on both outcomes to capture the bid-ask spread and maker rebates."
+        "name": "Automated Liquidity Provision & Bid-Ask Spread Capture",
+        "coverage_pct": round(h4_coverage, 1),
+        "counter_pct": round(h4_counter, 1),
+        "test_rule": "Executes both YES and NO sides on the same contract to capture market-maker spread",
+        "empirical_fit": round((100.0 - single_sided_pct), 1)
     })
 
-    # H5: Deep-Value Longshot Accumulation
-    h5_score = deep_val_pct * 0.95
+    # H5: Deep-Value Asymmetric Longshot Buying
+    h5_matches = sum(1 for p in prices if p < 0.20)
+    h5_violations = sum(1 for p in prices if p >= 0.50)
+    h5_coverage = (h5_matches / n_trades * 100) if n_trades else 0.0
+    h5_counter = (h5_violations / n_trades * 100) if n_trades else 0.0
     hypotheses.append({
         "id": "H5",
-        "name": "Deep-Value Asymmetric Longshot Accumulation",
-        "score": min(95.0, h5_score),
-        "counter_pct": round((100.0 - deep_val_pct) * 0.3, 1),
-        "description": "Systematically accumulates low-priced contracts (< $0.20) exploiting market favorite-longshot biases."
+        "name": "Deep-Value Asymmetric Longshot Buying (< $0.20)",
+        "coverage_pct": round(h5_coverage, 1),
+        "counter_pct": round(h5_counter, 1),
+        "test_rule": "Purchases low-probability contracts (< $0.20) exploiting tail mispricing",
+        "empirical_fit": round(deep_val_pct, 1)
     })
 
-    # Rank hypotheses by score
-    hypotheses = sorted(hypotheses, key=lambda x: x["score"], reverse=True)
+    # Rank hypotheses by empirical fit
+    hypotheses = sorted(hypotheses, key=lambda x: x["empirical_fit"], reverse=True)
     primary_hypothesis = hypotheses[0]
-    confidence_score = round(primary_hypothesis["score"], 1)
 
-    # ⑤ Walk-Forward OOS Temporal Consistency
-    oos_validation = {}
-    for month_k, m_trades in sorted(monthly_trades.items()):
-        if len(m_trades) >= 5:
-            m_prices = [float(t.get("price") or 0) for t in m_trades if t.get("price")]
-            if primary_hypothesis["id"] == "H1":
-                passed = sum(1 for p in m_prices if p > 0.70) / len(m_prices) >= 0.3
-            elif primary_hypothesis["id"] == "H3":
-                passed = sum(1 for p in m_prices if p > 0.70 or p < 0.30) / len(m_prices) >= 0.4
-            elif primary_hypothesis["id"] == "H5":
-                passed = sum(1 for p in m_prices if p < 0.20) / len(m_prices) >= 0.4
-            else:
-                passed = True
-            oos_validation[month_k] = "PASS ✅" if passed else "DEVIATED ⚠️"
+    # ── STAGE D: CHRONOLOGICAL OUT-OF-SAMPLE (OOS) VALIDATION ─────────────────
+    # Split trades chronologically into Train (first 60%) and Test (last 40%)
+    split_idx = int(n_trades * 0.6)
+    train_trades = trades[:split_idx]
+    test_trades = trades[split_idx:]
 
-    # ⑥ Construct Strict Epistemic Separation
+    oos_train_fit = 0.0
+    oos_test_fit = 0.0
+    oos_status = "Insufficient Sample"
+
+    if len(train_trades) >= 20 and len(test_trades) >= 20:
+        # Evaluate primary rule on Train vs Test
+        p_id = primary_hypothesis["id"]
+        if p_id == "H1":
+            train_match = sum(1 for t in train_trades if float(t.get("price") or 0) >= 0.75) / len(train_trades) * 100
+            test_match = sum(1 for t in test_trades if float(t.get("price") or 0) >= 0.75) / len(test_trades) * 100
+        elif p_id == "H2":
+            train_match = sum(1 for t in train_trades if 0.25 <= float(t.get("price") or 0) <= 0.75) / len(train_trades) * 100
+            test_match = sum(1 for t in test_trades if 0.25 <= float(t.get("price") or 0) <= 0.75) / len(test_trades) * 100
+        elif p_id == "H3":
+            train_match = sum(1 for t in train_trades if float(t.get("price") or 0) < 0.30 or float(t.get("price") or 0) > 0.75) / len(train_trades) * 100
+            test_match = sum(1 for t in test_trades if float(t.get("price") or 0) < 0.30 or float(t.get("price") or 0) > 0.75) / len(test_trades) * 100
+        elif p_id == "H5":
+            train_match = sum(1 for t in train_trades if float(t.get("price") or 0) < 0.20) / len(train_trades) * 100
+            test_match = sum(1 for t in test_trades if float(t.get("price") or 0) < 0.20) / len(test_trades) * 100
+        else:
+            train_match = 50.0
+            test_match = 50.0
+
+        oos_train_fit = round(train_match, 1)
+        oos_test_fit = round(test_match, 1)
+        # Check stability across train/test
+        discrepancy = abs(oos_test_fit - oos_train_fit)
+        if oos_test_fit >= 35.0 and discrepancy <= 25.0:
+            oos_status = f"PERSISTENT (Train: {oos_train_fit}% ➔ Test: {oos_test_fit}%, Δ {discrepancy:.1f}%)"
+        else:
+            oos_status = f"REGIME SHIFT (Train: {oos_train_fit}% ➔ Test: {oos_test_fit}%, Δ {discrepancy:.1f}%)"
+
+    # ── STAGE E: STRICT 3-TIER EPISTEMIC SEPARATION ────────────────────────────
     observed_facts = [
         f"Analyzed {n_trades} on-chain trades across {tot_mkts} independent contracts.",
         f"Asset Specialization: {primary_group_pct:.1f}% concentrated in [{primary_group}] ({primary_structure}).",
-        f"Entry Pricing: Mean ${fingerprint['mean_price']:.3f} | Median ${fingerprint['median_price']:.3f} (High-Certainty >$0.80: {high_prob_pct:.1f}% | Deep-Value <$0.20: {deep_val_pct:.1f}%).",
-        f"Order Sizing: Median ${fingerprint['median_size_usdc']:,.2f} USDC (Max clip: ${fingerprint['max_size_usdc']:,.2f} USDC).",
-        f"Directionality: {single_sided_pct:.1f}% single-sided directional positions vs {100.0-single_sided_pct:.1f}% dual-sided market making.",
-        f"Execution Timing: {late_candle_pct:.1f}% executed in the final 20% of the candle/cycle ({sniping_30s_pct:.1f}% in sub-30s window)." if minute_offsets else f"Execution Timing: Multi-day holding pattern across {tot_mkts} markets."
+        f"Entry Pricing: Mean ${mean_price:.3f} | Median ${median_price:.3f} (High-Certainty >$0.80: {high_prob_pct:.1f}% | Mid-Prob $0.20-$0.80: {mid_prob_pct:.1f}% | Deep-Value <$0.20: {deep_val_pct:.1f}%).",
+        f"Order Sizing Dispersion: Median ${statistics.median(sizes_usdc):,.2f} USDC (Mean: ${statistics.mean(sizes_usdc):,.2f} USDC | Max Clip: ${max(sizes_usdc):,.2f} USDC).",
+        f"Market Directionality: {single_sided_pct:.1f}% single-sided directional positions vs {100.0-single_sided_pct:.1f}% dual-sided market making.",
+        f"Execution Timing: {late_cycle_pct:.1f}% executed in late cycle (tau >= 0.70) | {mid_cycle_pct:.1f}% in mid cycle (tau 0.20-0.70)." if normalized_progress_list else f"Execution Timing: Multi-day holding pattern across {tot_mkts} markets.",
+        f"Empirical Sizing Escalation: Explicit Probe-then-Sweep sequences observed in {probe_sweep_freq_pct:.2f}% of consecutive order pairs ({probe_sweep_count}/{total_consecutive_pairs})."
     ]
 
     inferred_logic = [
-        f"Primary Operating Mechanism: {primary_hypothesis['name']} (Empirical Fit: {confidence_score}%).",
-        f"Execution Trigger: {primary_hypothesis['description']}",
-        f"Position Sizing Behavior: Uses dynamic sizing with probe orders before heavy liquidity sweeping." if fingerprint['max_size_usdc'] > fingerprint['median_size_usdc'] * 5 else f"Position Sizing Behavior: Uniform fixed-stake sizing.",
-        f"Negative Controls: Rejects {round(primary_hypothesis['counter_pct'])}% of potential trades when entry criteria are violated."
+        f"Best Matching Strategy Archetype: {primary_hypothesis['name']} (Empirical Support: {primary_hypothesis['empirical_fit']}/100).",
+        f"Empirical Trade Coverage: {primary_hypothesis['coverage_pct']}% of observed trades satisfy primary hypothesis conditions.",
+        f"Empirical Falsification Rate: {primary_hypothesis['counter_pct']}% of observed trades directly violate primary hypothesis conditions.",
+        f"Out-of-Sample Behavioral Persistence: {oos_status}."
     ]
 
     unknown_unverified = [
-        "Exact private off-chain data feed provider (e.g. Binance/Coinbase WebSocket, MeteoBlue, Bloomberg, proprietary node).",
-        "Exact algorithmic internal threshold constants and risk management sizing formulas.",
-        "Private API order-routing infrastructure, co-location, and server architecture."
+        "Unobserved Counterfactuals: No off-chain record of potential markets where trader entry conditions were met but the trader chose NOT to trade (No-Trade controls).",
+        "Exact External Data Feed: Cannot prove whether trader connects to Binance, Coinbase, Bybit, or a proprietary websocket node from public on-chain data alone.",
+        "Internal Execution Infrastructure: Exact latency thresholds, slippage tolerances, and internal risk sizing algorithms remain private."
     ]
 
     return {
@@ -2216,11 +2201,9 @@ def reverse_engineer_trader_strategy(wallet: str, max_trades: int = 500) -> Dict
         "primary_group": primary_group,
         "primary_structure": primary_structure,
         "primary_strategy": primary_hypothesis["name"],
-        "confidence_score": confidence_score,
-        "fingerprint": fingerprint,
+        "heuristic_fit_score": primary_hypothesis["empirical_fit"],
         "hypotheses": hypotheses,
-        "counter_evidence_pct": primary_hypothesis["counter_pct"],
-        "oos_validation": oos_validation,
+        "oos_status": oos_status,
         "observed_facts": observed_facts,
         "inferred_logic": inferred_logic,
         "unknown_unverified": unknown_unverified
@@ -2232,24 +2215,24 @@ def print_reverse_engineered_blueprint_cli(res: Dict[str, Any]) -> None:
         print(f"❌ Error: {res['error']}")
         return
 
-    print("\n" + "═" * 130)
-    print(f"  🧬 UNIVERSAL TRADER STRATEGY REVERSE ENGINEER")
+    print("\n" + "═" * 135)
+    print(f"  🧬 UNIVERSAL TRADER STRATEGY REVERSE ENGINEER (STAGE A-E EMPIRICAL FALSIFICATION)")
     print(f"  Trader: {res['username']} ({res['wallet']})")
     print(f"  Lifetime PnL: ${res['lifetime_pnl']:,.2f} | Analyzed Volume: ${res['lifetime_vol']:,.2f}")
-    print("═" * 130)
+    print("═" * 135)
 
     print(f"\n📂 1. MARKET SPECIALIZATION & CONTRACT STRUCTURE:")
     print(f"   • Primary Market Family:  [{res['primary_group']}]")
     print(f"   • Contract Archetype:     {res['primary_structure']}")
-    print(f"   • Inferred Core Strategy: {res['primary_strategy']}")
-    print(f"   • Strategy Confidence:    {res['confidence_score']}%")
+    print(f"   • Top Heuristic Match:    {res['primary_strategy']}")
+    print(f"   • Heuristic Fit Score:    {res['heuristic_fit_score']} / 100 (Empirical Coverage & Timing Weight)")
 
-    print(f"\n🔍 2. COMPETING HYPOTHESES & FALSIFICATION TEST:")
+    print(f"\n🔬 2. COMPETING HYPOTHESES & FALSIFICATION TEST:")
     for h in res["hypotheses"]:
-        bar_len = int(h["score"] / 10)
+        bar_len = int(h["empirical_fit"] / 10)
         bar = "█" * bar_len + "░" * (10 - bar_len)
         rank_tag = "👑 Primary Fit" if h["id"] == res["hypotheses"][0]["id"] else "   Alternative"
-        print(f"   [{bar}] {h['score']:>5.1f}% | {rank_tag} ({h['id']}): {h['name']}")
+        print(f"   [{bar}] {h['empirical_fit']:>5.1f}/100 | {rank_tag} ({h['id']}): {h['name']:<55} | Counter: {h['counter_pct']:>4.1f}%")
 
     print(f"\n📋 3. WHAT IS OBSERVED (Direct Ground-Truth On-Chain Facts):")
     for fact in res["observed_facts"]:
@@ -2259,20 +2242,13 @@ def print_reverse_engineered_blueprint_cli(res: Dict[str, Any]) -> None:
     for inf in res["inferred_logic"]:
         print(f"   ⚡ {inf}")
 
-    print(f"\n🔒 5. WHAT IS UNKNOWN / UNVERIFIED (Public Data Boundary):")
+    print(f"\n🔒 5. WHAT IS UNKNOWN / UNVERIFIED (Strict Epistemic Public Boundary):")
     for unk in res["unknown_unverified"]:
         print(f"   ❓ {unk}")
 
-    print(f"\n📅 6. OUT-OF-SAMPLE (OOS) TEMPORAL VALIDATION:")
-    if res["oos_validation"]:
-        oos_str = " | ".join([f"{k}: {v}" for k, v in res["oos_validation"].items()])
-        print(f"   • Monthly Consistency: {oos_str}")
-    else:
-        print(f"   • Single timeframe window (Insufficient monthly folds).")
-
-    print(f"\n⚠️ 7. COUNTER-EVIDENCE & FALSIFICATION SIGNALS:")
-    print(f"   • {res['counter_evidence_pct']}% of analyzed trades exhibit variance or deviate from strict primary model conditions.")
-    print("═" * 130)
+    print(f"\n📅 6. TRUE OUT-OF-SAMPLE (OOS) TEMPORAL VALIDATION:")
+    print(f"   • {res['oos_status']}")
+    print("═" * 135)
 
 
 # ── 12. CLI Entry Point ────────────────────────────────────────────────────────
@@ -2319,7 +2295,7 @@ def main():
     if args.meta_backtest:
         run_meta_backtest_cli()
     elif args.reverse_engineer:
-        rev_res = reverse_engineer_trader_strategy(args.reverse_engineer, max_trades=args.limit if args.limit > 100 else 500)
+        rev_res = reverse_engineer_trader_strategy(args.reverse_engineer, max_trades=args.limit if args.limit > 50 else 300)
         if args.json:
             print(json.dumps(rev_res, indent=2))
         else:
