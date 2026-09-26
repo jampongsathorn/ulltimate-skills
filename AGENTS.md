@@ -32,6 +32,15 @@ python3 -m compileall skills/ -q
   - Path: `skills/agentic-code-workflow/SKILL.md`
   - Triggers: building features, slow work, incomplete fixes, new skills
 
+- **`agentic-problem-solving`** — General evidence-driven mindset for working through blockers instead of stopping at the first error. Enforces Attempt → Observe → Hypothesize → Adjust → Escalate → Verify → Toolify, three meaningfully different routes when safe, independent end-to-end verification, reusable tooling, and durable knowledge notes.
+  - Path: `skills/agentic-problem-solving/SKILL.md`
+  - Triggers: first approach failed, API/automation integration, missing docs, flaky tools, unfamiliar systems, tempted to report “cannot do it”
+
+- **`server-api-reverse-engineering`** — Reconstruct an undocumented web-app API from an authorized browser workflow: capture Network/HAR ground truth, inspect JS callers, replay minimal requests, classify validation errors, independently verify results, then create a safe reusable client and knowledge record.
+  - Path: `skills/server-api-reverse-engineering/SKILL.md`
+  - Triggers: black-box web app, browser click to API, undocumented endpoint, HAR/DevTools request, JS bundle endpoint discovery, affiliate/internal dashboard automation
+  - Boundary: never bypass CAPTCHA, bot defenses, authorization, rate limits, or terms; prefer official APIs
+
 - **`grilling`** / **`grill-me`** / **`grill-with-docs`** / **`domain-modeling`** — Relentless interview to sharpen a plan or design. Maps decisions as a design tree, asks frontier in rounds, waits for answers. `grill-with-docs` also creates ADRs and glossary via `domain-modeling`. Use before any non-trivial task to reach shared understanding.
   - Path: `skills/grilling/SKILL.md` (core), `skills/grill-me/SKILL.md` (alias), `skills/grill-with-docs/SKILL.md` (grilling + docs), `skills/domain-modeling/SKILL.md` (glossary + ADRs)
   - Upstream: `mattpocock/skills` MIT, commit `c55ee46073ed923f86ce59a5eb3b6d895095d1b7`
