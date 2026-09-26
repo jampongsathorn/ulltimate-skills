@@ -71,7 +71,27 @@ Trader Evaluation & Portfolio Recommendation
 
 ## 💻 CLI Usage Guide
 
-### 1. Macro Market Performance & Settlement Structure
+### 1. Universal Strategy Reverse Engineer (Empirical Hypothesis Falsification)
+
+```bash
+# Reverse-engineer any trader (Crypto, Weather, Sports, Politics, etc.)
+python3 polymarket_tracker.py --reverse-engineer 0xcc500cbcc8b7cf5bd21975ebbea34f21b5644c82
+
+# Reverse-engineer Weather Master
+python3 polymarket_tracker.py --reverse-engineer 0x005ed998fcb786679eb8bfd0d20c15c0903d6d8e
+```
+
+### 2. Trader Liveness & Activity Scanner (Step 2 Gate)
+
+```bash
+# Scan Top Crypto leaderboard for active traders
+python3 polymarket_tracker.py --active-traders --category CRYPTO
+
+# Check specific trader liveness
+python3 polymarket_tracker.py --active-traders --wallet 0x55be7aa03ecfbe37aa5460db791205f7ac9ddca3
+```
+
+### 3. Macro Market Performance & Settlement Structure
 
 ```bash
 # Analyze all market groups across 2026
@@ -84,7 +104,7 @@ python3 polymarket_tracker.py --market-performance --start-date 2026-01-01 --end
 python3 polymarket_tracker.py --market-performance --slug-group weather --group-by month
 ```
 
-### 2. Multi-Market Screening (Ground-Truth Verified)
+### 4. Multi-Market Screening (Ground-Truth Verified)
 
 ```bash
 # Screen top traders across all markets
@@ -97,7 +117,7 @@ python3 polymarket_tracker.py --slug-group highest-temp
 python3 polymarket_tracker.py --screen-top --exclude-group sports-soccer --start-date 2026-01-01 --end-date 2026-09-26
 ```
 
-### 3. Deep Forensic Audit for a Single Wallet
+### 5. Deep Forensic Audit for a Single Wallet
 
 ```bash
 # Full audit with profile URL, ground-truth reconciliation, 3D metrics & walk-forward folds
@@ -107,7 +127,7 @@ python3 polymarket_tracker.py --wallet 0x005ed998fcb786679eb8bfd0d20c15c0903d6d8
 python3 polymarket_tracker.py --wallet 0x005ed998fcb786679eb8bfd0d20c15c0903d6d8e --json
 ```
 
-### 4. Real-Time Discord Follow Bot
+### 6. Real-Time Discord Follow Bot
 
 ```bash
 # Follow Weather Master for Weather markets only
