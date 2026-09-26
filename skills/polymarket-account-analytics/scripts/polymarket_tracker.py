@@ -1215,8 +1215,9 @@ DEFAULT_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL") or "https://discord.
 
 DEFAULT_FOLLOW_TARGETS = [
     {
-        "wallet": "0x005ed998fcb786679eb8bfd0d20c15c0903d6d8e",
-        "name": "Weather Master",
+        "wallet": "0x1387d145aaf01f6e33b66525dda6e1f51f6955f8",
+        "name": "Lucerys",
+        "category": "🌡️ Highest Temperature Specialist (+$108k PnL)"
         "category": "🌡️ Weather & Temperature Arbitrage"
     }
 ]
