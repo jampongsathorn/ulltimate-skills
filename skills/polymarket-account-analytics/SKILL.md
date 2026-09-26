@@ -1,7 +1,7 @@
 ---
 name: polymarket-account-analytics
-description: "Unified Quantitative Analytics, Ground-Truth On-Chain Reconciliation, 3D Trade Quality Evaluation, Rolling Walk-Forward Engine, Multi-Market Screener, and Fixed-Budget Meta-Backtest for Polymarket traders."
-version: 7.0.0
+description: "Unified Quantitative Analytics, Market Structure Classification, Ground-Truth On-Chain Reconciliation, 3D Trade Quality Evaluation, Rolling Walk-Forward Engine, Multi-Market Screener, Macro Market Performance Analytics, and Real-Time Discord Follow Bot for Polymarket."
+version: 8.0.0
 author: Arena Quantitative Agent
 ---
 
@@ -13,36 +13,78 @@ A comprehensive, production-grade CLI and Python API tool for discovering, evalu
 
 ## 🌟 Core Architecture & Features
 
-1. **Ground-Truth On-Chain Cross-Reconciliation**:
+1. **Market Structure Classification Layer**:
+   - Explicitly classifies every contract archetype (`Binary`, `Bracket / Range`, `Multi-Choice 1-of-N`, `Ordinal Threshold`).
+   - Disentangles **Settlement Structure / Outcome Distribution** from **Trading Alpha / Edge**, preventing false assumptions that high NO resolution in multi-choice markets represents an edge.
+
+2. **Ground-Truth On-Chain Cross-Reconciliation**:
    - Directly verifies lifetime balances, official ranks, and PnL against Polymarket Platform Ground-Truth (`/v1/leaderboard?user=<wallet>`).
    - Automatically detects and flags **High-Frequency Data Truncation** (e.g. accounts with 50k+ trades).
    - Hard Gate: Automatically disqualifies negative lifetime PnL accounts (e.g. volume-farming bots like `GoalLineGhost`).
 
-2. **True Settlement Merged Accounting**:
+3. **True Settlement Merged Accounting**:
    - Seamlessly reconciles claimed closed positions (`/closed-positions`) and unclaimed settled losses/wins sitting in open positions (`/positions` with `curPrice in [0.0, 1.0]`).
    - Completely eliminates **Asymmetric Truncation Selection Bias**.
 
-3. **3 Dimensions of Trade Quality (Signal | Sizing | Evidence)**:
+4. **3 Dimensions of Trade Quality (Signal | Sizing | Evidence)**:
    - **Signal Quality**: Mean Calibration Edge vs entry price, Bayesian shrinkage probability.
    - **Sizing Quality**: Capital-weighted edge per share, Sizing Edge Delta ($\Delta$).
    - **Evidence & Tail Risk**: Independent effective events ($N_{\text{eff}}$), Profit Factor, Max Drawdown, Expectancy.
 
-4. **Rolling Walk-Forward Out-of-Sample Engine**:
+5. **Rolling Walk-Forward Out-of-Sample Engine**:
    - Evaluates performance across sequential monthly forward time windows.
 
-5. **Multi-Market Quantitative Screener (`--screen-top`)**:
+6. **Multi-Market Quantitative Screener (`--screen-top`)**:
    - Screen top traders by market family (`--slug-group highest-temp`, `fed-rates`, `us-politics`, `btc-price`, etc.).
    - Support category exclusion (`--exclude-group sports-soccer`).
    - Custom timeframes (`--start-date 2026-03-01 --end-date 2026-09-30`).
 
-6. **Meta-Backtest Engine (`--meta-backtest`)**:
-   - Simulates fixed-budget ($10k/trader) forward copy-trading portfolios comparing Qualified vs Disqualified cohorts.
+7. **Macro Market Group Performance & Time-Series Analytics (`--market-performance`)**:
+   - Analyzes platform-wide market volume, settled count, and outcome distribution aggregated by market group or date period (`--group-by {group,month,week,day}`).
+
+8. **Real-Time Discord Follow Bot (`--follow-bot`)**:
+   - Automated trade detection with group inclusion/exclusion filtering and minimum price gates.
+
+---
+
+## 🧱 Quantitative Methodology & Pipeline
+
+```
+Market Family (slug_group)
+      ↓
+Market Structure Classification
+  ├── Binary (Yes/No proposition, 50/50 baseline)
+  ├── Bracket / Range (Mutually exclusive continuous ranges; 1 of K outcome)
+  ├── Multi-Choice (1 of N candidate/team winners)
+  └── Ordinal Threshold (Cumulative monotonic milestones)
+      ↓
+Event De-duplication & Hierarchy (event_id)
+      ↓
+Position Accounting & Settlement (True Settlement Accounting)
+      ↓
+3-Tier Quantitative Edge Hierarchy (Signal Edge → Capital Edge → N_eff → Temporal Persistence)
+      ↓
+Trader Evaluation & Portfolio Recommendation
+```
 
 ---
 
 ## 💻 CLI Usage Guide
 
-### 1. Multi-Market Screening (Ground-Truth Verified)
+### 1. Macro Market Performance & Settlement Structure
+
+```bash
+# Analyze all market groups across 2026
+python3 polymarket_tracker.py --market-performance --start-date 2026-01-01 --end-date 2026-09-26
+
+# Group by Month and analyze market outcome distribution
+python3 polymarket_tracker.py --market-performance --start-date 2026-01-01 --end-date 2026-09-26 --group-by month
+
+# Filter specifically for Weather markets across time
+python3 polymarket_tracker.py --market-performance --slug-group weather --group-by month
+```
+
+### 2. Multi-Market Screening (Ground-Truth Verified)
 
 ```bash
 # Screen top traders across all markets
@@ -52,38 +94,22 @@ python3 polymarket_tracker.py --screen-top
 python3 polymarket_tracker.py --slug-group highest-temp
 
 # Screen top traders excluding World Cup / Soccer
-python3 polymarket_tracker.py --screen-top --exclude-group sports-soccer --start-date 2026-03-01 --end-date 2026-09-30
-
-# Screen politics specialists
-python3 polymarket_tracker.py --slug-group us-politics
+python3 polymarket_tracker.py --screen-top --exclude-group sports-soccer --start-date 2026-01-01 --end-date 2026-09-26
 ```
 
-### 2. Deep Forensic Audit for a Single Wallet
+### 3. Deep Forensic Audit for a Single Wallet
 
 ```bash
 # Full audit with profile URL, ground-truth reconciliation, 3D metrics & walk-forward folds
 python3 polymarket_tracker.py --wallet 0x005ed998fcb786679eb8bfd0d20c15c0903d6d8e
 
-# Audit specific market family for a wallet
-python3 polymarket_tracker.py --wallet 0x005ed998fcb786679eb8bfd0d20c15c0903d6d8e --slug-group highest-temp
-
 # Output machine-readable JSON for agents
 python3 polymarket_tracker.py --wallet 0x005ed998fcb786679eb8bfd0d20c15c0903d6d8e --json
 ```
 
-### 3. Meta-Backtest & Copy-Trading Simulation
+### 4. Real-Time Discord Follow Bot
 
 ```bash
-# Run multi-fold walk-forward copy portfolio simulation
-python3 polymarket_tracker.py --meta-backtest
-```
-
-### 4. Official Leaderboard & Rankings
-
-```bash
-# Monthly leaderboard ranked by PnL
-python3 polymarket_tracker.py --leaderboard --timeframe MONTH
-
-# All-time leaderboard ranked by Volume ROI
-python3 polymarket_tracker.py --leaderboard --timeframe ALL --sort roi
+# Follow Weather Master for Weather markets only
+python3 polymarket_tracker.py --follow-bot --target 0x005ed998fcb786679eb8bfd0d20c15c0903d6d8e --include-group weather
 ```

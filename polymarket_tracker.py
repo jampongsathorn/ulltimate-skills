@@ -54,6 +54,29 @@ def extract_slug_group(slug: str, event_slug: str, title: str) -> str:
             return group_name
     return "other"
 
+def classify_market_structure(slug_group: str, slug: str, question: str) -> str:
+    """
+    Classify the structural mechanism of the prediction contract:
+    - Bracket: Mutually exclusive continuous/numerical range buckets (e.g. temperatures, price bands).
+    - Multi-Choice: Mutually exclusive categorical candidate/winner list (1 of N winner).
+    - Ordinal Threshold: Monotonic cumulative milestones (e.g. Will BTC hit >= $100k, >= $110k).
+    - Binary: Standard 2-outcome single proposition (Yes/No).
+    """
+    s = f"{slug} {question}".lower()
+    
+    if slug_group in ["highest-temp", "lowest-temp"] or "between" in s or "-to-" in s or re.search(r"\d+-\d+(f|c)", s):
+        return "Bracket (Ranges/Intervals)"
+    elif slug_group in ["btc-price", "eth-price"] and ("between" in s or "hit" in s and re.search(r"\$\d+k-\$\d+k", s)):
+        return "Bracket (Ranges/Intervals)"
+    elif "winner" in s or "champion" in s or slug_group == "sports-soccer" and ("cup" in s or "league" in s or "winner" in s):
+        return "Multi-Choice (1 of N)"
+    elif "hit" in s or "reach" in s or "exceed" in s or "above" in s or "below" in s or "higher" in s:
+        return "Ordinal Threshold"
+    elif slug_group in ["us-politics", "fed-rates"] and ("winner" in s or "nominee" in s):
+        return "Multi-Choice (1 of N)"
+    else:
+        return "Binary (Yes/No Proposition)"
+
 def extract_event_id(slug: str, event_slug: str, title: str) -> str:
     if event_slug and event_slug.strip():
         return event_slug.strip().lower()
@@ -1497,6 +1520,7 @@ def analyze_market_group_performance(
         "no_wins": 0,
         "unknown_wins": 0,
         "questions": [],
+        "slugs": [],
         "events": set(),
         "dates": []
     })
@@ -1584,6 +1608,8 @@ def analyze_market_group_performance(
         st["count"] += 1
         st["volume"] += vol
         st["dates"].append(date_str)
+        if slug:
+            st["slugs"].append(slug)
         if question:
             st["questions"].append(question)
         ev_id = extract_event_id(slug, "", question)
@@ -1610,18 +1636,8 @@ def analyze_market_group_performance(
         no_pct = (no_w / cnt * 100) if cnt > 0 else 0.0
         avg_vol = vol / cnt if cnt > 0 else 0.0
         n_events = len(data["events"])
-        
-        # Structural skew label
-        if no_pct >= 85.0:
-            skew = "🛑 Heavy NO Bias (Multi-Choice/Bracket)"
-        elif yes_pct >= 85.0:
-            skew = "🟢 Heavy YES Bias (Consensus Outcome)"
-        elif 40.0 <= yes_pct <= 60.0:
-            skew = "⚖️ Balanced 50/50 Binary"
-        elif no_pct > yes_pct:
-            skew = "🔻 Moderate NO Lean"
-        else:
-            skew = "🔺 Moderate YES Lean"
+        sample_q = data["questions"][0] if data["questions"] else ""
+        sample_slug = data["slugs"][0] if data["slugs"] else ""
 
         if isinstance(key, tuple):
             grp_name, date_slice = key
@@ -1633,9 +1649,26 @@ def analyze_market_group_performance(
                 grp_name = str(key)
                 date_slice = "ALL"
 
+        struct_type = classify_market_structure(grp_name, sample_slug, sample_q)
+
+        # Structural explanation (disentangling settlement distribution from alpha)
+        if "Bracket" in struct_type:
+            struct_context = "Expected Multi-Bracket Imbalance (1 of K; NOT NO-Alpha)"
+        elif "Multi-Choice" in struct_type:
+            struct_context = "Expected Multi-Candidate Imbalance (1 of N; NOT NO-Alpha)"
+        elif "Ordinal" in struct_type:
+            struct_context = "Cumulative Threshold (Monotonic Probabilities)"
+        elif 40.0 <= yes_pct <= 60.0:
+            struct_context = "Balanced Binary (Near 50/50 Baseline)"
+        elif yes_pct > 60.0:
+            struct_context = "Realized Consensus (High YES Realization)"
+        else:
+            struct_context = "Realized Low Frequency (High NO Realization)"
+
         rows.append({
             "group": grp_name,
             "period": date_slice,
+            "market_structure": struct_type,
             "markets_count": cnt,
             "events_count": n_events,
             "volume_usd": vol,
@@ -1644,7 +1677,7 @@ def analyze_market_group_performance(
             "no_wins": no_w,
             "yes_win_pct": yes_pct,
             "no_win_pct": no_pct,
-            "structural_skew": skew
+            "structural_context": struct_context
         })
 
     # Sort rows by volume descending
@@ -1665,37 +1698,40 @@ def analyze_market_group_performance(
 
 def print_market_group_performance_cli(res: Dict[str, Any], group_by: str = "group") -> None:
     data = res.get("data", [])
-    print("=" * 125)
-    print("  📊 POLYMARKET MARKET GROUP & MACRO PERFORMANCE ANALYTICS")
+    print("=" * 140)
+    print("  📊 POLYMARKET MARKET GROUP & MACRO PERFORMANCE ANALYTICS (SETTLEMENT STRUCTURE LAYER)")
     print(f"  Time Window:   {res.get('start_date')} ➔ {res.get('end_date')}")
     print(f"  Grouped By:    {group_by.upper()} | Total Markets: {res.get('total_markets_analyzed'):,} | Total Volume: ${res.get('total_volume_usd', 0):,.2f}")
-    print("=" * 125)
+    print("=" * 140)
 
     if not data:
         print("  No closed markets found for the specified filters and timeframe.")
-        print("=" * 125)
+        print("=" * 140)
         return
 
     if group_by in ["month", "week", "date", "day"]:
-        header = f"{'Market Group':<22} | {'Period':<10} | {'Markets':<7} | {'Events':<6} | {'Total Volume ($)':<16} | {'Avg Vol ($)':<12} | {'YES %':<6} | {'NO %':<6} | {'Structural Bias':<25}"
+        header = f"{'Market Group':<20} | {'Period':<8} | {'Structure':<18} | {'Markets':<7} | {'Total Volume ($)':<16} | {'YES %':<6} | {'NO %':<6} | {'Outcome Distribution & Structural Context'}"
         print(header)
-        print("-" * 125)
+        print("-" * 140)
         for r in data:
-            print(f"{r['group']:<22} | {r['period']:<10} | {r['markets_count']:<7} | {r['events_count']:<6} | ${r['volume_usd']:>14,.2f} | ${r['avg_volume_usd']:>10,.2f} | {r['yes_win_pct']:>5.1f}% | {r['no_win_pct']:>5.1f}% | {r['structural_skew']}")
+            print(f"{r['group']:<20} | {r['period']:<8} | {r['market_structure'][:18]:<18} | {r['markets_count']:<7} | ${r['volume_usd']:>14,.2f} | {r['yes_win_pct']:>5.1f}% | {r['no_win_pct']:>5.1f}% | {r['structural_context']}")
     elif group_by in ["month-only", "date-only"]:
-        header = f"{'Period':<12} | {'Markets':<7} | {'Events':<6} | {'Total Volume ($)':<18} | {'Avg Vol/Market':<14} | {'YES %':<7} | {'NO %':<7} | {'Structural Settlement Bias'}"
+        header = f"{'Period':<12} | {'Markets':<7} | {'Events':<6} | {'Total Volume ($)':<18} | {'Avg Vol/Market':<14} | {'YES %':<7} | {'NO %':<7} | {'Structural Context'}"
         print(header)
-        print("-" * 125)
+        print("-" * 140)
         for r in data:
-            print(f"{r['period']:<12} | {r['markets_count']:<7} | {r['events_count']:<6} | ${r['volume_usd']:>16,.2f} | ${r['avg_volume_usd']:>12,.2f} | {r['yes_win_pct']:>6.1f}% | {r['no_win_pct']:>6.1f}% | {r['structural_skew']}")
+            print(f"{r['period']:<12} | {r['markets_count']:<7} | {r['events_count']:<6} | ${r['volume_usd']:>16,.2f} | ${r['avg_volume_usd']:>12,.2f} | {r['yes_win_pct']:>6.1f}% | {r['no_win_pct']:>6.1f}% | {r['structural_context']}")
     else:
-        header = f"{'Market Group':<26} | {'Markets':<7} | {'Events':<6} | {'Total Volume ($)':<18} | {'Avg Vol/Market':<14} | {'YES %':<7} | {'NO %':<7} | {'Structural Settlement Bias'}"
+        header = f"{'Market Group':<22} | {'Structure':<22} | {'Markets':<7} | {'Total Volume ($)':<18} | {'Avg Vol/Market':<14} | {'YES %':<6} | {'NO %':<6} | {'Outcome Distribution & Structural Context'}"
         print(header)
-        print("-" * 125)
+        print("-" * 140)
         for r in data:
-            print(f"{r['group']:<26} | {r['markets_count']:<7} | {r['events_count']:<6} | ${r['volume_usd']:>16,.2f} | ${r['avg_volume_usd']:>12,.2f} | {r['yes_win_pct']:>6.1f}% | {r['no_win_pct']:>6.1f}% | {r['structural_skew']}")
+            print(f"{r['group']:<22} | {r['market_structure'][:22]:<22} | {r['markets_count']:<7} | ${r['volume_usd']:>16,.2f} | ${r['avg_volume_usd']:>12,.2f} | {r['yes_win_pct']:>5.1f}% | {r['no_win_pct']:>5.1f}% | {r['structural_context']}")
 
-    print("=" * 125)
+    print("=" * 140)
+    print("  💡 NOTE: A high NO settlement rate in Bracket/Multi-Choice markets is an expected mathematical consequence of mutually exclusive")
+    print("     outcomes (1 winner out of N brackets), NOT directional alpha or evidence that blindly buying NO is a profitable edge.")
+    print("=" * 140)
 
 
 # ── 10. CLI Entry Point ────────────────────────────────────────────────────────
