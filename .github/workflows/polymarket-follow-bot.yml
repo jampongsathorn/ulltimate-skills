@@ -1,0 +1,48 @@
+name: Polymarket Follow Bot Cron Check
+
+on:
+  schedule:
+    # รันเช็กทุกๆ 5 นาที (ความถี่สูงสุดที่เป็นทางการของ GitHub Actions Cron)
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # เปิดให้กดปุ่ม "Run workflow" แบบ Manual ได้เอง
+
+jobs:
+  check-trades:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Restore Seen Trades Cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/seen_trades.json
+          key: polymarket-seen-${{ github.run_id }}
+          restore-keys: |
+            polymarket-seen-
+
+      - name: Run Polymarket Follow Bot Check
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          # ย้าย cache ถ้ามี
+          if [ -f /tmp/seen_trades.json ]; then
+            cp /tmp/seen_trades.json seen_trades.json
+          fi
+
+          python3 polymarket_tracker.py \
+            --follow-bot \
+            --target "0x005ed998fcb786679eb8bfd0d20c15c0903d6d8e" \
+            --include-group "weather" \
+            --webhook "$DISCORD_WEBHOOK_URL" \
+            --once
+
+          # เก็บ cache กลับไปที่ /tmp เพื่อให้อัปโหลดรอบถัดไป
+          if [ -f seen_trades.json ]; then
+            cp seen_trades.json /tmp/seen_trades.json
+          fi
