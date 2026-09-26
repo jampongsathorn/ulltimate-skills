@@ -1,6 +1,8 @@
-# CHECKPOINT_LOG.md — บันทึกการ re-anchor
+# Checkpoint template — คัดลอกเป็นไฟล์ใหม่ทุกรอบ
 
-> เติมทุกครั้งก่อนเริ่ม task ถัดไป หรือก่อนตัดสินใจสำคัญ/fork ทาง
+> ห้ามแก้ทับไฟล์ checkpoint เดิม สร้างไฟล์ใหม่ใน `checkpoints/` ทุกครั้ง
+> ก่อนเริ่ม task ถัดไป หรือก่อนตัดสินใจสำคัญ/fork ทาง
+> ตั้งชื่อไฟล์เรียงเลขรัน เช่น `checkpoints/001.md`, `checkpoints/002.md`, ...
 
 ## Checkpoint #<n> — <วันที่/เวลา>
 - North Star (อ่านซ้ำจาก GOAL.md): ...
