@@ -769,6 +769,10 @@ def run_single_family_waterfall(
 
         share_of_test_trades = (cm_test.true_positives / all_test_trades_count * 100.0) if all_test_trades_count > 0 else 0.0
 
+        is_accepted = status_icon in ["🟢", "🟡"]
+        claimed_tp = cm_test.true_positives if is_accepted else 0
+        share_of_test_trades = (claimed_tp / all_test_trades_count * 100.0) if all_test_trades_count > 0 else 0.0
+
         waterfall_results.append({
             "stage": h_idx,
             "id": h.id,
@@ -780,7 +784,8 @@ def run_single_family_waterfall(
             "test_metrics": {
                 "total_opportunities": cm_test.total_opportunities,
                 "signal_triggers": sample_size,
-                "tp": cm_test.true_positives,
+                "tp": claimed_tp,
+                "raw_tp": cm_test.true_positives,
                 "fp": cm_test.false_positives,
                 "fn": cm_test.false_negatives,
                 "tn": cm_test.true_negatives,
@@ -796,11 +801,13 @@ def run_single_family_waterfall(
             "execution_mechanism_note": "? Passive maker — supported by external execution archives | ? Taker sweep — not excluded by this price/time test"
         })
 
-        current_train_grid = [r for r in current_train_grid if not (h.eval_fn(r, best_p) and r.trader_action.traded)]
-        current_test_grid = [r for r in current_test_grid if not (h.eval_fn(r, best_p) and r.trader_action.traded)]
+        if is_accepted and claimed_tp > 0:
+            current_train_grid = [r for r in current_train_grid if not (h.eval_fn(r, best_p) and r.trader_action.traded)]
+            current_test_grid = [r for r in current_test_grid if not (h.eval_fn(r, best_p) and r.trader_action.traded)]
 
-    explained_test_trades_sum = sum(w["test_metrics"]["tp"] for w in waterfall_results if w["status_icon"] == "🟢")
-    unclassified_trades_count = max(0, all_test_trades_count - explained_test_trades_sum)
+    # Exclusive accounting invariant check
+    total_explained_trades = sum(w["test_metrics"]["tp"] for w in waterfall_results if w["status_icon"] in ["🟢", "🟡"])
+    unclassified_trades_count = max(0, all_test_trades_count - total_explained_trades)
     unclassified_pct = (unclassified_trades_count / all_test_trades_count * 100.0) if all_test_trades_count > 0 else 0.0
 
     return {
