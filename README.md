@@ -17,6 +17,7 @@ installable plugin. Install it once, and every skill added to `skills/` shows up
 | [`grill-me`](skills/grill-me/SKILL.md) | Alias for grilling — trigger phrase users remember. Calls grilling skill. | Vendored from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) — see [`UPSTREAM.md`](skills/grill-me/UPSTREAM.md) |
 | [`grill-with-docs`](skills/grill-with-docs/SKILL.md) | Relentless interview that also creates docs (ADRs and glossary) as you go. Calls grilling + domain-modeling. | Vendored from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) — see [`UPSTREAM.md`](skills/grill-with-docs/UPSTREAM.md) |
 | [`domain-modeling`](skills/domain-modeling/SKILL.md) | Build and sharpen a project's domain model. Use when discussing terminology, writing CONTEXT.md, or recording ADRs. | Vendored from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) — see [`UPSTREAM.md`](skills/domain-modeling/UPSTREAM.md) |
+| [`goal-keeper`](skills/goal-keeper/SKILL.md) | Meta-skill/orchestrator for long, multi-step "big goal" work. Loads before other skills whenever a task spans more than one step, to prevent goal drift: writes a durable `GOAL.md`/`PLAN.md`, forces periodic re-anchoring against the North Star, and blocks declaring "done" until the Definition of Done is verified with evidence. | Original — meta-skill / orchestrator |
 
 ## Install
 
