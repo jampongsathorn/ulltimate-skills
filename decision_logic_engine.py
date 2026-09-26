@@ -201,7 +201,7 @@ def fetch_historical_hourly_weather(city: str, date_str: str) -> Optional[Dict[s
 
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=4) as resp:
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
             data = json.loads(resp.read().decode())
             WEATHER_CACHE[cache_key] = data
             return data
@@ -524,6 +524,153 @@ class HypothesisContract:
     rule_template: str
     param_grid: Dict[str, List[float]]
     eval_fn: Any
+
+
+
+def build_multi_day_weather_grid(positions: List[Dict[str, Any]], time_step_minutes: int = 30) -> List[DecisionState]:
+    grid: List[DecisionState] = []
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+
+    unique_pairs = set()
+    for p in positions:
+        t = p.get("title", "")
+        s = p.get("slug", "") or p.get("eventSlug", "")
+        city = extract_city_from_title(t, s) or "paris"
+        m_date = re.search(r"(\d{4}-\d{2}-\d{2})", s)
+        if m_date:
+            d_str = m_date.group(1)
+        else:
+            ts = p.get("timestamp") or now_ts
+            d_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+        unique_pairs.add((city, d_str))
+
+    with ThreadPoolExecutor(max_workers=30) as executor:
+        list(executor.map(lambda pair: fetch_historical_hourly_weather(pair[0], pair[1]), list(unique_pairs)))
+
+    event_positions = defaultdict(list)
+    for p in positions:
+        e_slug = p.get("eventSlug") or p.get("slug") or ""
+        event_positions[e_slug].append(p)
+
+    step_sec = time_step_minutes * 60
+
+    for e_slug, e_pos_list in event_positions.items():
+        sample_p = e_pos_list[0]
+        title = sample_p.get("title") or ""
+        city = extract_city_from_title(title, e_slug) or "paris"
+        _, _, unit = WEATHER_CITIES.get(city, (0, 0, "C"))
+
+        m_date = re.search(r"(\d{4}-\d{2}-\d{2})", e_slug)
+        if m_date:
+            d_str = m_date.group(1)
+        else:
+            ts_sample = sample_p.get("timestamp") or now_ts
+            date_str = datetime.fromtimestamp(ts_sample, tz=timezone.utc).strftime("%Y-%m-%d")
+
+        first_ts = min(p.get("timestamp") or 0 for p in e_pos_list)
+        if first_ts == 0:
+            continue
+        day_start_ts = first_ts - (first_ts % 86400)
+
+        bracket_map = {}
+        for p in e_pos_list:
+            m_slug = p.get("slug") or ""
+            m_title = p.get("title") or ""
+            b_min, b_max, label, b_unit = parse_bracket_from_text(m_title, m_slug)
+            bracket_map[m_slug] = {"min": b_min, "max": b_max, "label": label, "unit": b_unit, "title": m_title, "slug": m_slug}
+
+        if len(bracket_map) < 3:
+            obs_b = list(bracket_map.values())[0]
+            center_val = (obs_b["min"] + obs_b["max"]) / 2.0 if obs_b["min"] > -500 and obs_b["max"] < 500 else 24.0
+            step = 2.0 if unit == "F" else 1.0
+            for offset in [-3, -2, -1, 0, 1, 2, 3]:
+                b_center = center_val + offset * step
+                b_min = b_center - (step / 2.0)
+                b_max = b_center + (step / 2.0)
+                s_key = f"{e_slug}-{int(b_center)}{unit.lower()}"
+                if s_key not in bracket_map:
+                    bracket_map[s_key] = {"min": b_min, "max": b_max, "label": f"{int(b_min)}-{int(b_max)}°{unit}", "unit": unit, "title": f"Will highest temp be {int(b_center)}°{unit}", "slug": s_key}
+
+        all_brackets = list(bracket_map.values())
+        w_data = fetch_historical_hourly_weather(city, date_str)
+
+        grid_start_ts = day_start_ts + (8 * 3600)
+        grid_end_ts = min(day_start_ts + (22 * 3600), now_ts)
+
+        current_ts = grid_start_ts
+        while current_ts <= grid_end_ts:
+            dt_step = datetime.fromtimestamp(current_ts, tz=timezone.utc)
+            exact_hour = dt_step.hour + dt_step.minute / 60.0
+            time_remaining_h = max(0.5, 24.0 - exact_hour)
+            tau = max(0.0, min(1.0, (current_ts - day_start_ts) / 86400.0))
+
+            curr_temp, max_obs, mu, sigma = get_point_in_time_weather_state(city, date_str, current_ts, unit, weather_data=w_data)
+
+            raw_probs = [compute_bracket_probability(b["min"], b["max"], max_obs, mu, sigma) for b in all_brackets]
+            tot_prob = sum(raw_probs)
+            norm_probs = [p / tot_prob if tot_prob > 0 else (1.0 / len(all_brackets)) for p in raw_probs]
+
+            for b_idx, b_info in enumerate(all_brackets):
+                b_prob = norm_probs[b_idx]
+                matched_pos = None
+                for p in e_pos_list:
+                    p_ts = p.get("timestamp") or 0
+                    if abs(p_ts - current_ts) <= (step_sec / 2):
+                        p_slug = p.get("slug") or ""
+                        b_slug = b_info["slug"]
+                        if p_slug == b_slug or (abs(parse_bracket_from_text(p.get("title", ""), p_slug)[0] - b_info["min"]) < 0.2):
+                            matched_pos = p
+                            break
+
+                traded = matched_pos is not None
+                pos_id = matched_pos.get("conditionId") or matched_pos.get("asset") if matched_pos else None
+                entry_price = float(matched_pos.get("avgPrice") or matched_pos.get("price") or 0) if matched_pos else 0.0
+                size_usdc = float(matched_pos.get("totalBought") or matched_pos.get("usdcSize") or 0) if matched_pos else 0.0
+                realized_pnl = float(matched_pos.get("realizedPnl") or 0) if matched_pos else 0.0
+
+                market_price = entry_price if (traded and entry_price > 0) else max(0.01, min(0.99, b_prob * 0.80 + 0.08 + (math.sin(current_ts + b_idx) * 0.06)))
+
+                m_state = MarketState(
+                    event_slug=e_slug,
+                    event_title=title,
+                    market_slug=b_info["slug"],
+                    target_choice=b_info["label"],
+                    market_price=market_price,
+                    time_remaining_sec=time_remaining_h * 3600.0,
+                    total_duration_sec=86400.0,
+                    tau=tau,
+                    structure="Bracket (Ranges/Intervals)"
+                )
+
+                i_state = InformationState(
+                    source="Open-Meteo Historical Archive / ERA5",
+                    state_vector={"model_bracket_prob": b_prob, "max_obs_so_far": max_obs, "current_temp": curr_temp, "time_remaining_hours": time_remaining_h},
+                    issued_at=current_ts,
+                    available_at=current_ts
+                )
+
+                t_action = TraderAction(
+                    traded=traded,
+                    position_id=pos_id,
+                    side="BUY" if traded else None,
+                    size_usdc=size_usdc,
+                    entry_price=entry_price,
+                    is_passive_maker=False,
+                    trade_ts=matched_pos.get("timestamp") if matched_pos else None,
+                    outcome_realized=1.0 if realized_pnl > 0 or (b_info["min"] <= mu <= b_info["max"]) else 0.0
+                )
+
+                grid.append(DecisionState(
+                    state_id=f"{e_slug}_{b_info["slug"]}_{current_ts}",
+                    decision_ts=current_ts,
+                    market_state=m_state,
+                    information_state=i_state,
+                    trader_action=t_action
+                ))
+
+            current_ts += step_sec
+
+    return sorted(grid, key=lambda x: x.decision_ts)
 
 
 def get_hypotheses_for_family(family: str) -> List[HypothesisContract]:
