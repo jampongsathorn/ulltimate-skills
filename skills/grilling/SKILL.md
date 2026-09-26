@@ -1,6 +1,6 @@
 ---
 name: grilling
-description: Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases. Also use when building new features or fixing bugs without a clear workflow — this skill forces systematic design-tree thinking before any code is written.
+description: Interview the user directly and relentlessly about a plan, decision, or idea, in question rounds, waiting for their real answers each round. Use when the user explicitly asks to be interviewed live (not delegated to a subagent) — e.g. "interview me", "walk me through the questions". Also use when building new features or fixing bugs without a clear workflow — this skill forces systematic design-tree thinking before any code is written. Not for the phrase "grill me" alone: that phrase is reserved for a separate subagent-critique loop defined elsewhere, which drafts and refines a plan across subagent rounds and only interrupts the user once at the end — this skill is the direct live-interview alternative, for when that hand-off-free style is explicitly wanted instead.
 ---
 
 # Grilling

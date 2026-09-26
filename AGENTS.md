@@ -41,10 +41,11 @@ python3 -m compileall skills/ -q
   - Triggers: black-box web app, browser click to API, undocumented endpoint, HAR/DevTools request, JS bundle endpoint discovery, affiliate/internal dashboard automation
   - Boundary: never bypass CAPTCHA, bot defenses, authorization, rate limits, or terms; prefer official APIs
 
-- **`grilling`** / **`grill-me`** / **`grill-with-docs`** / **`domain-modeling`** — Relentless interview to sharpen a plan or design. Maps decisions as a design tree, asks frontier in rounds, waits for answers. `grill-with-docs` also creates ADRs and glossary via `domain-modeling`. Use before any non-trivial task to reach shared understanding.
-  - Path: `skills/grilling/SKILL.md` (core), `skills/grill-me/SKILL.md` (alias), `skills/grill-with-docs/SKILL.md` (grilling + docs), `skills/domain-modeling/SKILL.md` (glossary + ADRs)
+- **`grilling`** / **`domain-modeling`** — Direct live interview to sharpen a plan or design. Maps decisions as a design tree, asks frontier in rounds, waits for the user's real answers each round. Pair with `domain-modeling` to capture resolved terms/ADRs as you go.
+  - Path: `skills/grilling/SKILL.md` (core), `skills/domain-modeling/SKILL.md` (glossary + ADRs)
   - Upstream: `mattpocock/skills` MIT, commit `c55ee46073ed923f86ce59a5eb3b6d895095d1b7`
-  - Triggers: "grill me", "stress test", planning, design, CONTEXT.md, ADR
+  - Triggers: "interview me", "walk me through the questions", "stress test my thinking", planning, design, CONTEXT.md, ADR
+  - Not the same as "grill me": that phrase is reserved elsewhere for a subagent-critique loop that interrupts the user only once, at the end — use `grilling` only when a direct live interview is explicitly wanted instead.
 
 ### Bug Fixing
 
