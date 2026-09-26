@@ -1302,6 +1302,7 @@ def run_follow_bot(
     include_groups: Optional[List[str]] = None,
     exclude_groups: Optional[List[str]] = None,
     min_price: Optional[float] = None,
+    lookback_minutes: int = 15,
     poll_interval: int = 15,
     run_once: bool = False,
     test_mode: bool = False
@@ -1320,6 +1321,7 @@ def run_follow_bot(
     print(f"  Exclude Groups: [{exc_str}]")
     if min_price is not None:
         print(f"  Min Price:      ${min_price:.3f}")
+    print(f"  Lookback:       {lookback_minutes} mins")
     print(f"  Tracking:       {len(targets)} Verified High-Alpha Traders")
     print("=" * 105)
     for i, t in enumerate(targets, 1):
@@ -1345,22 +1347,24 @@ def run_follow_bot(
         print("Test Alert Sent Status:", "✅ Success" if success else "❌ Failed")
         return
 
-    # First run initialization (mark current existing trades as seen so we don't spam historical orders)
-    if len(seen_trades) == 0:
-        print("First-time startup: Ingesting existing trades into seen cache to avoid spamming old history...")
-        for t in targets:
-            acts = fetch_wallet_recent_activity(t["wallet"], limit=20)
-            for act in acts:
-                trade_id = act.get("transactionHash") or f"{act.get('timestamp')}_{act.get('conditionId')}_{act.get('outcomeIndex')}_{act.get('side')}"
+    # Ingest historical trades older than lookback window into seen cache
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    cutoff_ts = now_ts - (lookback_minutes * 60)
+    
+    for t in targets:
+        acts = fetch_wallet_recent_activity(t["wallet"], limit=40)
+        for act in acts:
+            ts = act.get("timestamp") or 0
+            trade_id = act.get("transactionHash") or f"{ts}_{act.get('conditionId')}_{act.get('outcomeIndex')}_{act.get('side')}"
+            if ts < cutoff_ts:
                 seen_trades.add(trade_id)
-        save_seen_trades(seen_trades)
-        print(f"Ingested {len(seen_trades)} historical trades. Listening for NEW live incoming orders...\n")
+    save_seen_trades(seen_trades)
 
     try:
         while True:
             new_alerts_count = 0
             for t in targets:
-                acts = fetch_wallet_recent_activity(t["wallet"], limit=10)
+                acts = fetch_wallet_recent_activity(t["wallet"], limit=20)
                 # Sort chronological
                 acts = sorted(acts, key=lambda x: x.get("timestamp") or 0)
                 for act in acts:
@@ -1441,6 +1445,7 @@ def main():
     parser.add_argument("--test-alert", action="store_true", help="Send a test trade alert card to Discord webhook")
     parser.add_argument("--webhook", type=str, default=DEFAULT_WEBHOOK_URL, help="Discord webhook URL")
     parser.add_argument("--poll-interval", type=int, default=15, help="Polling interval in seconds (default 15)")
+    parser.add_argument("--lookback", type=int, default=15, help="Lookback window in minutes for recent trade detection (default 15)")
     parser.add_argument("--min-price", type=float, default=None, help="Minimum trade price filter (e.g. 0.10 to filter out lotto bets)")
     parser.add_argument("--once", action="store_true", help="Run a single poll check and exit")
     
@@ -1478,6 +1483,7 @@ def main():
             include_groups=inc_groups,
             exclude_groups=exc_groups,
             min_price=args.min_price,
+            lookback_minutes=args.lookback,
             poll_interval=args.poll_interval,
             run_once=args.once
         )

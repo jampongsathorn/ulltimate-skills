@@ -2,9 +2,12 @@ name: Polymarket Follow Bot Cron Check
 
 on:
   schedule:
-    # รันเช็กทุกๆ 5 นาที (ความถี่สูงสุดที่เป็นทางการของ GitHub Actions Cron)
+    # รันเช็กทุกๆ 5 นาที (ความถี่สูงสุดของ GitHub Actions Cron)
     - cron: '*/5 * * * *'
   workflow_dispatch: # เปิดให้กดปุ่ม "Run workflow" แบบ Manual ได้เอง
+
+permissions:
+  contents: write
 
 jobs:
   check-trades:
@@ -18,31 +21,21 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Restore Seen Trades Cache
-        uses: actions/cache@v4
-        with:
-          path: /tmp/seen_trades.json
-          key: polymarket-seen-${{ github.run_id }}
-          restore-keys: |
-            polymarket-seen-
-
       - name: Run Polymarket Follow Bot Check
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          # ย้าย cache ถ้ามี
-          if [ -f /tmp/seen_trades.json ]; then
-            cp /tmp/seen_trades.json seen_trades.json
-          fi
-
           python3 polymarket_tracker.py \
             --follow-bot \
             --target "0x005ed998fcb786679eb8bfd0d20c15c0903d6d8e" \
             --include-group "weather" \
             --webhook "$DISCORD_WEBHOOK_URL" \
+            --lookback 25 \
             --once
 
-          # เก็บ cache กลับไปที่ /tmp เพื่อให้อัปโหลดรอบถัดไป
-          if [ -f seen_trades.json ]; then
-            cp seen_trades.json /tmp/seen_trades.json
-          fi
+      - name: Commit & Push Seen Trades Cache
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add seen_trades.json || true
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update seen trades cache [skip ci]" && git push)
