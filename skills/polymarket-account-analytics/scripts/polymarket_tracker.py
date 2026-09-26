@@ -1430,7 +1430,275 @@ def run_follow_bot(
         print("\nFollow Bot stopped by user.")
         save_seen_trades(seen_trades)
 
-# ── 9. CLI Entry Point ─────────────────────────────────────────────────────────
+# ── 9. Market Group Macro Performance Analytics ───────────────────────────────
+
+def fetch_closed_markets(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    max_markets: int = 500
+) -> List[Dict[str, Any]]:
+    """Fetch closed markets from Polymarket Gamma API with pagination."""
+    all_markets: List[Dict[str, Any]] = []
+    limit = 100
+    offset = 0
+
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    s_ts = parse_date_to_timestamp(start_date, default_ts=0, is_end_of_day=False) if start_date else None
+    e_ts = parse_date_to_timestamp(end_date, default_ts=now_ts, is_end_of_day=True) if end_date else None
+    
+    s_date_str = datetime.fromtimestamp(s_ts, tz=timezone.utc).strftime("%Y-%m-%d") if s_ts else None
+    e_date_str = datetime.fromtimestamp(e_ts, tz=timezone.utc).strftime("%Y-%m-%d") if e_ts else None
+
+    while len(all_markets) < max_markets:
+        url = f"https://gamma-api.polymarket.com/markets?closed=true&limit={limit}&offset={offset}&order=volumeNum&ascending=false"
+        if s_date_str:
+            url += f"&end_date_min={s_date_str}"
+        if e_date_str:
+            url += f"&end_date_max={e_date_str}"
+            
+        data = make_request(url)
+        if not data or not isinstance(data, list):
+            break
+            
+        all_markets.extend(data)
+        if len(data) < limit:
+            break
+        offset += limit
+        
+    return all_markets[:max_markets]
+
+
+def analyze_market_group_performance(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    slug_group_filter: Optional[str] = None,
+    exclude_group: Optional[str] = None,
+    group_by: str = "group",
+    max_markets: int = 500
+) -> Dict[str, Any]:
+    """
+    Analyze platform-wide performance, volume, and settlement bias aggregated by Market Group and Date.
+    """
+    markets = fetch_closed_markets(start_date, end_date, max_markets)
+    
+    # Filter groups
+    target_groups = None
+    if slug_group_filter and slug_group_filter.upper() != "ALL":
+        target_groups = [g.strip().lower() for g in slug_group_filter.split(",") if g.strip()]
+        
+    excluded_groups = None
+    if exclude_group:
+        excluded_groups = [g.strip().lower() for g in exclude_group.split(",") if g.strip()]
+
+    grouped_stats: Dict[Any, Dict[str, Any]] = defaultdict(lambda: {
+        "count": 0,
+        "volume": 0.0,
+        "yes_wins": 0,
+        "no_wins": 0,
+        "unknown_wins": 0,
+        "questions": [],
+        "events": set(),
+        "dates": []
+    })
+
+    total_volume_sum = 0.0
+    total_markets_count = 0
+
+    for m in markets:
+        slug = m.get("slug") or ""
+        question = m.get("question") or ""
+        vol = float(m.get("volumeNum") or m.get("volume") or 0)
+        grp = extract_slug_group(slug, "", question)
+        
+        # Apply group filter
+        if target_groups:
+            matched = False
+            for tg in target_groups:
+                if tg in ["weather", "temp", "temperature"] and grp in ["highest-temp", "lowest-temp", "precipitation-weather"]:
+                    matched = True
+                    break
+                elif tg in grp or grp in tg:
+                    matched = True
+                    break
+            if not matched:
+                continue
+
+        # Apply exclude filter
+        if excluded_groups:
+            excluded = False
+            for eg in excluded_groups:
+                if eg in ["weather", "temp", "temperature"] and grp in ["highest-temp", "lowest-temp", "precipitation-weather"]:
+                    excluded = True
+                    break
+                elif eg in grp or grp in eg:
+                    excluded = True
+                    break
+            if excluded:
+                continue
+
+        end_date_raw = m.get("endDate") or m.get("closedTime") or ""
+        date_str = end_date_raw[:10] if len(end_date_raw) >= 10 else "Unknown"
+        month_str = end_date_raw[:7] if len(end_date_raw) >= 7 else "Unknown"
+        
+        # Parse ISO week
+        week_str = "Unknown"
+        if len(date_str) == 10:
+            try:
+                dt_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                week_str = f"{dt_obj.year}-W{dt_obj.isocalendar()[1]:02d}"
+            except Exception:
+                pass
+
+        # Determine winner
+        outcomes = m.get("outcomePrices")
+        yes_win = False
+        no_win = False
+        if outcomes:
+            try:
+                prices = json.loads(outcomes) if isinstance(outcomes, str) else outcomes
+                if len(prices) >= 2:
+                    p0 = float(prices[0])
+                    p1 = float(prices[1])
+                    if p0 >= 0.99:
+                        yes_win = True
+                    elif p1 >= 0.99:
+                        no_win = True
+            except Exception:
+                pass
+
+        # Determine grouping key
+        if group_by == "month":
+            key = (grp, month_str)
+        elif group_by == "week":
+            key = (grp, week_str)
+        elif group_by in ["date", "day"]:
+            key = (grp, date_str)
+        elif group_by == "date-only":
+            key = date_str
+        elif group_by == "month-only":
+            key = month_str
+        else:
+            key = grp
+
+        st = grouped_stats[key]
+        st["count"] += 1
+        st["volume"] += vol
+        st["dates"].append(date_str)
+        if question:
+            st["questions"].append(question)
+        ev_id = extract_event_id(slug, "", question)
+        st["events"].add(ev_id)
+        
+        if yes_win:
+            st["yes_wins"] += 1
+        elif no_win:
+            st["no_wins"] += 1
+        else:
+            st["unknown_wins"] += 1
+
+        total_volume_sum += vol
+        total_markets_count += 1
+
+    # Format result records
+    rows = []
+    for key, data in grouped_stats.items():
+        cnt = data["count"]
+        vol = data["volume"]
+        yes_w = data["yes_wins"]
+        no_w = data["no_wins"]
+        yes_pct = (yes_w / cnt * 100) if cnt > 0 else 0.0
+        no_pct = (no_w / cnt * 100) if cnt > 0 else 0.0
+        avg_vol = vol / cnt if cnt > 0 else 0.0
+        n_events = len(data["events"])
+        
+        # Structural skew label
+        if no_pct >= 85.0:
+            skew = "🛑 Heavy NO Bias (Multi-Choice/Bracket)"
+        elif yes_pct >= 85.0:
+            skew = "🟢 Heavy YES Bias (Consensus Outcome)"
+        elif 40.0 <= yes_pct <= 60.0:
+            skew = "⚖️ Balanced 50/50 Binary"
+        elif no_pct > yes_pct:
+            skew = "🔻 Moderate NO Lean"
+        else:
+            skew = "🔺 Moderate YES Lean"
+
+        if isinstance(key, tuple):
+            grp_name, date_slice = key
+        else:
+            if group_by in ["date-only", "month-only"]:
+                grp_name = "ALL"
+                date_slice = str(key)
+            else:
+                grp_name = str(key)
+                date_slice = "ALL"
+
+        rows.append({
+            "group": grp_name,
+            "period": date_slice,
+            "markets_count": cnt,
+            "events_count": n_events,
+            "volume_usd": vol,
+            "avg_volume_usd": avg_vol,
+            "yes_wins": yes_w,
+            "no_wins": no_w,
+            "yes_win_pct": yes_pct,
+            "no_win_pct": no_pct,
+            "structural_skew": skew
+        })
+
+    # Sort rows by volume descending
+    if group_by in ["month", "week", "date", "day", "date-only", "month-only"]:
+        rows = sorted(rows, key=lambda x: (x["period"], -x["volume_usd"]))
+    else:
+        rows = sorted(rows, key=lambda x: x["volume_usd"], reverse=True)
+
+    return {
+        "start_date": start_date or "Genesis",
+        "end_date": end_date or "Now",
+        "group_by": group_by,
+        "total_markets_analyzed": total_markets_count,
+        "total_volume_usd": total_volume_sum,
+        "data": rows
+    }
+
+
+def print_market_group_performance_cli(res: Dict[str, Any], group_by: str = "group") -> None:
+    data = res.get("data", [])
+    print("=" * 125)
+    print("  📊 POLYMARKET MARKET GROUP & MACRO PERFORMANCE ANALYTICS")
+    print(f"  Time Window:   {res.get('start_date')} ➔ {res.get('end_date')}")
+    print(f"  Grouped By:    {group_by.upper()} | Total Markets: {res.get('total_markets_analyzed'):,} | Total Volume: ${res.get('total_volume_usd', 0):,.2f}")
+    print("=" * 125)
+
+    if not data:
+        print("  No closed markets found for the specified filters and timeframe.")
+        print("=" * 125)
+        return
+
+    if group_by in ["month", "week", "date", "day"]:
+        header = f"{'Market Group':<22} | {'Period':<10} | {'Markets':<7} | {'Events':<6} | {'Total Volume ($)':<16} | {'Avg Vol ($)':<12} | {'YES %':<6} | {'NO %':<6} | {'Structural Bias':<25}"
+        print(header)
+        print("-" * 125)
+        for r in data:
+            print(f"{r['group']:<22} | {r['period']:<10} | {r['markets_count']:<7} | {r['events_count']:<6} | ${r['volume_usd']:>14,.2f} | ${r['avg_volume_usd']:>10,.2f} | {r['yes_win_pct']:>5.1f}% | {r['no_win_pct']:>5.1f}% | {r['structural_skew']}")
+    elif group_by in ["month-only", "date-only"]:
+        header = f"{'Period':<12} | {'Markets':<7} | {'Events':<6} | {'Total Volume ($)':<18} | {'Avg Vol/Market':<14} | {'YES %':<7} | {'NO %':<7} | {'Structural Settlement Bias'}"
+        print(header)
+        print("-" * 125)
+        for r in data:
+            print(f"{r['period']:<12} | {r['markets_count']:<7} | {r['events_count']:<6} | ${r['volume_usd']:>16,.2f} | ${r['avg_volume_usd']:>12,.2f} | {r['yes_win_pct']:>6.1f}% | {r['no_win_pct']:>6.1f}% | {r['structural_skew']}")
+    else:
+        header = f"{'Market Group':<26} | {'Markets':<7} | {'Events':<6} | {'Total Volume ($)':<18} | {'Avg Vol/Market':<14} | {'YES %':<7} | {'NO %':<7} | {'Structural Settlement Bias'}"
+        print(header)
+        print("-" * 125)
+        for r in data:
+            print(f"{r['group']:<26} | {r['markets_count']:<7} | {r['events_count']:<6} | ${r['volume_usd']:>16,.2f} | ${r['avg_volume_usd']:>12,.2f} | {r['yes_win_pct']:>6.1f}% | {r['no_win_pct']:>6.1f}% | {r['structural_skew']}")
+
+    print("=" * 125)
+
+
+# ── 10. CLI Entry Point ────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="Polymarket 3-Dimensional Quantitative Engine & Rolling Walk-Forward Tracker")
@@ -1438,6 +1706,8 @@ def main():
     # Target
     parser.add_argument("--wallet", type=str, default="", help="Proxy wallet address (0x...) to analyze")
     parser.add_argument("--screen", "--screen-top", action="store_true", help="Run multi-trader quantitative screening across market families")
+    parser.add_argument("--market-performance", "--group-analytics", "--group-stats", action="store_true", help="Analyze macro performance, volume, and settlement bias across Market Groups and Timeframes")
+    parser.add_argument("--group-by", choices=["group", "month", "week", "day", "date", "date-only", "month-only"], default="group", help="Aggregation level for market performance analysis (default: group)")
     parser.add_argument("--leaderboard", action="store_true", help="Display top traders leaderboard")
     parser.add_argument("--meta-backtest", action="store_true", help="Run Meta-Backtest to validate the predictive power of trader screening criteria")
     parser.add_argument("--follow-bot", "--alert-bot", action="store_true", help="Start real-time Discord Webhook alert bot tracking Alpha traders")
@@ -1469,12 +1739,33 @@ def main():
 
     if args.meta_backtest:
         run_meta_backtest_cli()
+    elif args.market_performance:
+        res = analyze_market_group_performance(
+            start_date=args.start_date,
+            end_date=args.end_date,
+            slug_group_filter=args.slug_group,
+            exclude_group=args.exclude_group,
+            group_by=args.group_by,
+            max_markets=args.limit if args.limit > 50 else 500
+        )
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print_market_group_performance_cli(res, group_by=args.group_by)
     elif args.test_alert:
         run_follow_bot(webhook_url=args.webhook, test_mode=True)
     elif args.follow_bot:
         custom_targets = None
         if args.target:
-            custom_targets = [{"wallet": args.target.strip().lower(), "name": "Target Trader", "category": "Custom Track"}]
+            target_addr = args.target.strip().lower()
+            name = "Target Trader"
+            cat = "Custom Track"
+            for d in DEFAULT_FOLLOW_TARGETS:
+                if d["wallet"].lower() == target_addr:
+                    name = d["name"]
+                    cat = d["category"]
+                    break
+            custom_targets = [{"wallet": target_addr, "name": name, "category": cat}]
         inc_groups = [g.strip() for g in args.slug_group.split(",") if g.strip()] if args.slug_group and args.slug_group != "ALL" else None
         exc_groups = [g.strip() for g in args.exclude_group.split(",") if g.strip()] if args.exclude_group else None
         run_follow_bot(
