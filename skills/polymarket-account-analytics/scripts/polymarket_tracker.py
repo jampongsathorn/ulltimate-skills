@@ -2258,6 +2258,7 @@ def main():
     
     # Target
     parser.add_argument("--wallet", type=str, default="", help="Proxy wallet address (0x...) to analyze")
+    parser.add_argument("--strategy-map", "--trader-map", type=str, default=None, help="Multi-Family Trader Strategy Map Decomposition")
     parser.add_argument("--signal-logic", "--decode-logic", type=str, default=None, help="V1.1 Signal & Decision Logic Reverse Engineering (Opportunity Grid & Zero-Leakage OOS)")
     parser.add_argument("--reverse-engineer", "--decode-strategy", type=str, default=None, help="Universal Strategy Reverse Engineer: Falsify competing hypotheses and extract strategy blueprint")
     parser.add_argument("--screen", "--screen-top", action="store_true", help="Run multi-trader quantitative screening across market families")
@@ -2293,7 +2294,14 @@ def main():
 
     args = parser.parse_args()
 
-    if args.signal_logic:
+    if args.strategy_map:
+        from decision_logic_engine import run_trader_strategy_map, print_trader_strategy_map_cli
+        res = run_trader_strategy_map(args.strategy_map, max_trades=args.limit if args.limit > 50 else 600)
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print_trader_strategy_map_cli(res)
+    elif args.signal_logic:
         from decision_logic_engine import run_signal_decision_reverse_engineer, print_signal_decision_blueprint_cli
         res = run_signal_decision_reverse_engineer(args.signal_logic, max_trades=args.limit if args.limit > 50 else 300)
         if args.json:
