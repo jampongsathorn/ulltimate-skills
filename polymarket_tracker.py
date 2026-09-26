@@ -2258,6 +2258,7 @@ def main():
     
     # Target
     parser.add_argument("--wallet", type=str, default="", help="Proxy wallet address (0x...) to analyze")
+    parser.add_argument("--signal-logic", "--decode-logic", type=str, default=None, help="V1.1 Signal & Decision Logic Reverse Engineering (Opportunity Grid & Zero-Leakage OOS)")
     parser.add_argument("--reverse-engineer", "--decode-strategy", type=str, default=None, help="Universal Strategy Reverse Engineer: Falsify competing hypotheses and extract strategy blueprint")
     parser.add_argument("--screen", "--screen-top", action="store_true", help="Run multi-trader quantitative screening across market families")
     parser.add_argument("--active-traders", "--check-activity", "--activity-scanner", action="store_true", help="Scan and verify if traders are actively trading right now (Liveness Gate)")
@@ -2292,7 +2293,14 @@ def main():
 
     args = parser.parse_args()
 
-    if args.meta_backtest:
+    if args.signal_logic:
+        from decision_logic_engine import run_signal_decision_reverse_engineer, print_signal_decision_blueprint_cli
+        res = run_signal_decision_reverse_engineer(args.signal_logic, max_trades=args.limit if args.limit > 50 else 300)
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print_signal_decision_blueprint_cli(res)
+    elif args.meta_backtest:
         run_meta_backtest_cli()
     elif args.reverse_engineer:
         rev_res = reverse_engineer_trader_strategy(args.reverse_engineer, max_trades=args.limit if args.limit > 50 else 300)
