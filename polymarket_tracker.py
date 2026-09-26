@@ -1474,7 +1474,15 @@ def main():
     elif args.follow_bot:
         custom_targets = None
         if args.target:
-            custom_targets = [{"wallet": args.target.strip().lower(), "name": "Target Trader", "category": "Custom Track"}]
+            target_addr = args.target.strip().lower()
+            name = "Target Trader"
+            cat = "Custom Track"
+            for d in DEFAULT_FOLLOW_TARGETS:
+                if d["wallet"].lower() == target_addr:
+                    name = d["name"]
+                    cat = d["category"]
+                    break
+            custom_targets = [{"wallet": target_addr, "name": name, "category": cat}]
         inc_groups = [g.strip() for g in args.slug_group.split(",") if g.strip()] if args.slug_group and args.slug_group != "ALL" else None
         exc_groups = [g.strip() for g in args.exclude_group.split(",") if g.strip()] if args.exclude_group else None
         run_follow_bot(
