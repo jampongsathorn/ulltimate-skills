@@ -2258,6 +2258,8 @@ def main():
     
     # Target
     parser.add_argument("--wallet", type=str, default="", help="Proxy wallet address (0x...) to analyze")
+    parser.add_argument("--paper-audit", "--follower-replay", action="store_true", help="Audit settled forward paper executions and print Point-in-Time Follower Replay Table")
+    parser.add_argument("--paper-signal", type=str, default=None, help="Filter paper audit by strategy signal name")
     parser.add_argument("--simulate-execution", "--executable-edge", action="store_true", help="Simulate forward execution feasibility, VWAP slippage, and net realizable edge")
     parser.add_argument("--strategy-name", type=str, default="Mid-Price Tactical Entry", help="Strategy component name to simulate")
     parser.add_argument("--gross-edge", type=float, default=52.1, help="Gross realized edge percentage")
@@ -2297,7 +2299,15 @@ def main():
 
     args = parser.parse_args()
 
-    if args.simulate_execution:
+    if args.paper_audit:
+        from forward_paper_engine import audit_and_settle_paper_trades, generate_follower_replay_report, print_follower_replay_table_cli
+        audit_and_settle_paper_trades()
+        rep = generate_follower_replay_report(args.paper_signal)
+        if args.json:
+            print(json.dumps(rep, indent=2))
+        else:
+            print_follower_replay_table_cli(rep)
+    elif args.simulate_execution:
         from forward_execution_engine import simulate_forward_execution, print_forward_execution_report_cli
         res = simulate_forward_execution(args.strategy_name, args.slug_group if args.slug_group != "ALL" else "Macro Crypto", args.gross_edge)
         if args.json:
