@@ -1218,7 +1218,6 @@ DEFAULT_FOLLOW_TARGETS = [
         "wallet": "0x1387d145aaf01f6e33b66525dda6e1f51f6955f8",
         "name": "Lucerys",
         "category": "🌡️ Highest Temperature Specialist (+$108k PnL)"
-        "category": "🌡️ Weather & Temperature Arbitrage"
     }
 ]
 
