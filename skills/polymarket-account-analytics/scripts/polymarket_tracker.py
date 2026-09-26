@@ -2300,13 +2300,13 @@ def main():
     args = parser.parse_args()
 
     if args.paper_audit:
-        from forward_paper_engine import audit_and_settle_paper_trades, generate_follower_replay_report, print_follower_replay_table_cli
+        from forward_paper_engine import audit_and_settle_paper_trades, generate_full_execution_matrix_report, print_follower_matrix_table_cli
         audit_and_settle_paper_trades()
-        rep = generate_follower_replay_report(args.paper_signal)
+        rep = generate_full_execution_matrix_report(args.paper_signal)
         if args.json:
             print(json.dumps(rep, indent=2))
         else:
-            print_follower_replay_table_cli(rep)
+            print_follower_matrix_table_cli(rep)
     elif args.simulate_execution:
         from forward_execution_engine import simulate_forward_execution, print_forward_execution_report_cli
         res = simulate_forward_execution(args.strategy_name, args.slug_group if args.slug_group != "ALL" else "Macro Crypto", args.gross_edge)
