@@ -2258,6 +2258,9 @@ def main():
     
     # Target
     parser.add_argument("--wallet", type=str, default="", help="Proxy wallet address (0x...) to analyze")
+    parser.add_argument("--simulate-execution", "--executable-edge", action="store_true", help="Simulate forward execution feasibility, VWAP slippage, and net realizable edge")
+    parser.add_argument("--strategy-name", type=str, default="Mid-Price Tactical Entry", help="Strategy component name to simulate")
+    parser.add_argument("--gross-edge", type=float, default=52.1, help="Gross realized edge percentage")
     parser.add_argument("--strategy-map", "--trader-map", type=str, default=None, help="Multi-Family Trader Strategy Map Decomposition")
     parser.add_argument("--signal-logic", "--decode-logic", type=str, default=None, help="V1.1 Signal & Decision Logic Reverse Engineering (Opportunity Grid & Zero-Leakage OOS)")
     parser.add_argument("--reverse-engineer", "--decode-strategy", type=str, default=None, help="Universal Strategy Reverse Engineer: Falsify competing hypotheses and extract strategy blueprint")
@@ -2294,7 +2297,14 @@ def main():
 
     args = parser.parse_args()
 
-    if args.strategy_map:
+    if args.simulate_execution:
+        from forward_execution_engine import simulate_forward_execution, print_forward_execution_report_cli
+        res = simulate_forward_execution(args.strategy_name, args.slug_group if args.slug_group != "ALL" else "Macro Crypto", args.gross_edge)
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print_forward_execution_report_cli(res)
+    elif args.strategy_map:
         from decision_logic_engine import run_trader_strategy_map, print_trader_strategy_map_cli
         res = run_trader_strategy_map(args.strategy_map, max_trades=args.limit if args.limit > 50 else 600)
         if args.json:
