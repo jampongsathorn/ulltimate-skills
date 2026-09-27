@@ -14,7 +14,7 @@ Fix bugs systematically, completely, with no leftover bugs.
 - Agent is slow because it debugs endlessly with no clear workflow before coding
 - You want a measurable definition of "complete": reproduce + root cause + fix all + test
 
-If you don't have a plan yet, call `agentic-code-workflow` first, then this skill for the bug-specific phase, or call `grilling` to clear the design tree.
+If you don't have a plan yet, call `agentic-code-workflow` first, then this skill for the bug-specific phase, or call `self-grilling` to clear the design tree.
 
 ## Definition of Done (Complete = 4 items)
 
@@ -54,7 +54,7 @@ You must see a failure before moving on. If you can't reproduce, you don't under
 
 ### 2. Root Cause Tree — Why did this happen?
 
-Use `grilling` to ask yourself:
+Use `self-grilling` to ask yourself:
 
 ```
 Root: Why does buggyFunc return wrong value?

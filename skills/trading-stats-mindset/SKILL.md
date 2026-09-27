@@ -15,7 +15,7 @@ Make your agent analyze trading strategies like a professor with 10 years experi
 - Before deploying, after drawdown, or when performance decays
 - Agent needs to choose best statistical test strategically, not just run formulas
 
-If you haven't gathered facts, call `agentic-code-workflow` Scan first, then `grilling` to map what you are trying to prove.
+If you haven't gathered facts, call `agentic-code-workflow` Scan first, then `self-grilling` to map what you are trying to prove.
 
 ## Core Professor Mindset — 5 Mandatory Checks
 

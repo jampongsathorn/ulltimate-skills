@@ -18,7 +18,7 @@ If it's specifically a bug fix, call `bugfix-systematic` after this skill — th
 
 ## Core Principle
 
-**Find facts yourself. Don't ask the user for anything you can look up with tools.** — This is the rule from `grilling`.
+**Find facts yourself. Don't ask the user for anything you can look up with tools.** — This is the rule from `self-grilling`.
 
 ## Workflow (6 mandatory steps)
 
@@ -49,10 +49,10 @@ Why scan? Bugs like "fix one file, break another" happen because dependencies we
 
 ### 2. Grill — Build a design tree
 
-Invoke the `grilling` skill:
+Invoke the `self-grilling` skill:
 
-- In Claude Code: `/ulltimate-skills:grilling`
-- In Arena: `read_file skills/grilling/SKILL.md` and follow it
+- In Claude Code: `/ulltimate-skills:self-grilling`
+- In Arena: `read_file skills/self-grilling/SKILL.md` and follow it
 
 Map as a tree, ask the frontier in rounds until no assumptions remain. Don't write code until you get `confirm`.
 

@@ -1,6 +1,6 @@
 # Upstream
 
-`grilling` is vendored from mattpocock/skills, not written here.
+`self-grilling` (vendored here under this repo's own name; upstream calls it `grilling`) is vendored from mattpocock/skills, not written here.
 Keep it in sync occasionally; don't edit the core interview logic in place.
 
 | | |
@@ -18,7 +18,7 @@ tmp=$(mktemp -d)
 git clone --filter=blob:none --sparse --depth 1 https://github.com/mattpocock/skills.git "$tmp"
 git -C "$tmp" sparse-checkout set skills/productivity/grilling
 
-rsync -a "$tmp/skills/productivity/grilling/" skills/grilling/
+rsync -a "$tmp/skills/productivity/grilling/" skills/self-grilling/
 # restore local additions if overwritten, then update commit hash above
 git -C "$tmp" log -1 --format=%H
 rm -rf "$tmp"

@@ -41,11 +41,11 @@ python3 -m compileall skills/ -q
   - Triggers: black-box web app, browser click to API, undocumented endpoint, HAR/DevTools request, JS bundle endpoint discovery, affiliate/internal dashboard automation
   - Boundary: never bypass CAPTCHA, bot defenses, authorization, rate limits, or terms; prefer official APIs
 
-- **`grilling`** / **`domain-modeling`** — Direct live interview to sharpen a plan or design. Maps decisions as a design tree, asks frontier in rounds, waits for the user's real answers each round. Pair with `domain-modeling` to capture resolved terms/ADRs as you go.
-  - Path: `skills/grilling/SKILL.md` (core), `skills/domain-modeling/SKILL.md` (glossary + ADRs)
+- **`self-grilling`** / **`domain-modeling`** — Direct live interview to sharpen a plan or design. Maps decisions as a design tree, asks frontier in rounds, waits for the user's real answers each round. Pair with `domain-modeling` to capture resolved terms/ADRs as you go.
+  - Path: `skills/self-grilling/SKILL.md` (core), `skills/domain-modeling/SKILL.md` (glossary + ADRs)
   - Upstream: `mattpocock/skills` MIT, commit `c55ee46073ed923f86ce59a5eb3b6d895095d1b7`
   - Triggers: "interview me", "walk me through the questions", "stress test my thinking", planning, design, CONTEXT.md, ADR
-  - Not the same as "grill me": that phrase is reserved elsewhere for a subagent-critique loop that interrupts the user only once, at the end — use `grilling` only when a direct live interview is explicitly wanted instead.
+  - Not the same as "grill me": that phrase is reserved elsewhere for a subagent-critique loop that interrupts the user only once, at the end — use `self-grilling` only when a direct live interview is explicitly wanted instead.
 
 ### Bug Fixing
 
@@ -81,7 +81,7 @@ find . -type f -not -path "*/node_modules/*" -not -path "*/.git/*" | head -30
 rg -n "buggyFunction" --type js --type ts --type py
 
 # 3. Grill (if needed)
-read_file skills/grilling/SKILL.md
+read_file skills/self-grilling/SKILL.md
 # → run rounds until confirm
 
 # 4. Follow bugfix-systematic 7 steps

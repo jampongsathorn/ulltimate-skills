@@ -1,5 +1,5 @@
 ---
-name: grilling
+name: self-grilling
 description: Interview the user directly and relentlessly about a plan, decision, or idea, in question rounds, waiting for their real answers each round. Use when the user explicitly asks to be interviewed live (not delegated to a subagent) — e.g. "interview me", "walk me through the questions". Also use when building new features or fixing bugs without a clear workflow — this skill forces systematic design-tree thinking before any code is written. Not for the phrase "grill me" alone: that phrase is reserved for a separate subagent-critique loop defined elsewhere, which drafts and refines a plan across subagent rounds and only interrupts the user once at the end — this skill is the direct live-interview alternative, for when that hand-off-free style is explicitly wanted instead.
 ---
 
@@ -32,8 +32,8 @@ The session is done when the frontier is empty: every branch of the design tree 
 ## Arena / Claude Code Adaptation
 
 This skill is dual-mode:
-- **Claude Code**: installed as `/ulltimate-skills:grilling`, auto-discovered via `skills/` scanning
-- **Arena**: read this file directly via `read_file` — Arena has no auto-load, so you must explicitly point at `skills/grilling/SKILL.md`. Also listed in root `AGENTS.md`.
+- **Claude Code**: installed as `/ulltimate-skills:self-grilling`, auto-discovered via `skills/` scanning
+- **Arena**: read this file directly via `read_file` — Arena has no auto-load, so you must explicitly point at `skills/self-grilling/SKILL.md`. Also listed in root `AGENTS.md`.
 
 When using in Arena:
 - Use `bash` to gather facts (`find`, `rg`, `ls`) before asking
