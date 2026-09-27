@@ -1,87 +1,130 @@
-# 🦅 Polymarket Alpha Tracker & Follow Bot
+# ulltimate-skills
 
-[![Polymarket Follow Bot Cron Check](https://github.com/jampongsathorn/polymarket-alpha-tracker/actions/workflows/polymarket-follow-bot.yml/badge.svg)](https://github.com/jampongsathorn/polymarket-alpha-tracker/actions/workflows/polymarket-follow-bot.yml)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+A personal library of reusable [Claude Code](https://code.claude.com/docs/en/plugins) skills, packaged as one
+installable plugin. Install it once, and every skill added to `skills/` shows up automatically after an update.
 
-> **All-in-One Polymarket Quantitative Analytics Engine, Multi-Trader Screener & Real-Time Discord Follow Bot.**
-> Fully reconciled with on-chain ground-truth data, eliminating sampling truncation artifacts and false alphas.
+## What's in here
 
----
+| Skill | What it does | Origin |
+| --- | --- | --- |
+| [`skill-creator`](skills/skill-creator/SKILL.md) | Build a new skill from scratch, improve an existing one, write test cases, run evals, benchmark with/without the skill, and optimise the description so it triggers reliably. | Vendored from [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) (Apache-2.0) — see [`UPSTREAM.md`](skills/skill-creator/UPSTREAM.md) |
+| [`agentic-code-workflow`](skills/agentic-code-workflow/SKILL.md) | Systematic 6-step workflow (Scan → Grill → Plan → Implement → Validate → Document) for code agentic agents to work like a senior engineer. Dual-mode Claude Code + Arena. Forces concrete commands, dependency search, and closing checklist. | Original — for Claude Code + Arena |
+| [`agentic-problem-solving`](skills/agentic-problem-solving/SKILL.md) | Evidence-driven mindset for agents that must not give up at the first wall. Runs Attempt → Observe → Hypothesize → Adjust → Escalate → Verify → Toolify; requires small probes, meaningful fallbacks, independent verification, reusable tools, and durable knowledge without bypassing safety controls. | Original — general purpose |
+| [`server-api-reverse-engineering`](skills/server-api-reverse-engineering/SKILL.md) | Reconstruct an undocumented web-app API from an authorized browser workflow. Captures real requests, traces JS callers, probes payload validation, verifies results independently, and packages a safe reusable client without bypassing CAPTCHA, access controls, or rate limits. | Original — black-box web integration |
+| [`bugfix-systematic`](skills/bugfix-systematic/SKILL.md) | Systematic bug fixing that fixes root cause + all dependent files, not just one file. Enforces Reproduce → Root Cause Tree → Dependency Search → Fix Root → Fix All Impacted → Validate → Regression Guard. Stack generic JS/TS + Python. | Original — for Claude Code + Arena |
+| [`trading-stats-mindset`](skills/trading-stats-mindset/SKILL.md) | Think like a 10-year stats professor for time series trading analysis. Forces Distribution > Point, Stationarity, Randomness, Sample size, Bias checks. Detects regime shifts, overfitting/walk-forward degradation, tail risk/drawdown clustering, win rate illusion. Includes decision tree, theory/heuristic/trap, and Python script that generates report + memo. | Original — professor-level |
+| [`grilling`](skills/grilling/SKILL.md) | Interview the user directly and relentlessly about a plan, decision, or idea. Maps as design tree, asks frontier in rounds, waits for the user's real answers. Use when a direct live interview is explicitly wanted — not the same as "grill me", which is reserved for a subagent-critique loop that only interrupts the user once, at the end. | Vendored from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) — see [`UPSTREAM.md`](skills/grilling/UPSTREAM.md) |
+| [`domain-modeling`](skills/domain-modeling/SKILL.md) | Build and sharpen a project's domain model. Use when discussing terminology, writing CONTEXT.md, or recording ADRs. | Vendored from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) — see [`UPSTREAM.md`](skills/domain-modeling/UPSTREAM.md) |
+| [`goal-keeper`](skills/goal-keeper/SKILL.md) | Meta-skill/orchestrator for long, multi-step "big goal" work. Loads before other skills whenever a task spans more than one step, to prevent goal drift: writes a durable `GOAL.md`/`PLAN.md`, forces periodic re-anchoring against the North Star, and blocks declaring "done" until the Definition of Done is verified with evidence. | Original — meta-skill / orchestrator |
 
-## 🌟 Key Features
+## Install
 
-1. **Multi-Trader Quantitative Screening (`--screen-top`)**:
-   - Filter by market family/slug-group (e.g. `highest-temp`, `lowest-temp`, `precipitation-weather`, `btc-price`, `fed-rates`, `us-politics`, etc.).
-   - Exclude specific groups (e.g. `--exclude-group sports-soccer,pop-culture`).
-   - True Settlement Accounting & Effective Event Count ($N_{\text{eff}}$) calculation.
-   - Rigorous 3-Tier Metric Hierarchy: $\text{Signal Edge} \longrightarrow \text{Capital Edge} \longrightarrow N_{\text{eff}} \longrightarrow \text{Temporal Persistence}$.
-
-2. **Real-Time Discord Follow Bot (`--follow-bot`)**:
-   - Ultra-clean, non-cluttered signal cards sent to Discord Webhooks.
-   - **Market Group Filtering**: Target specific categories (e.g. `--include-group weather`) or exclude noise (`--exclude-group sports-soccer`).
-   - **Minimum Price Filtering**: Filter out low-probability lottery bets (e.g. `--min-price 0.10`).
-   - Direct clickable Polymarket trade URLs and profile links.
-
-3. **Multi-Fold Rolling Walk-Forward Validation**:
-   - Sequential chronological out-of-sample testing to prevent lookahead and hindsight bias.
-
-4. **Zero-Dependency Architecture**:
-   - Built exclusively using Python 3 standard libraries (`urllib`, `json`, `sqlite3`, `datetime`).
-   - Runs out-of-the-box on GitHub Actions, VPS, Raspberry Pi, Docker, or local machine.
-
----
-
-## ⚡ Quick Start
-
-### 1. Run Quantitative Screener
 ```bash
-# Screen Top 10 Weather traders in 2026
-python3 polymarket_tracker.py --screen-top --slug-group weather --start-date 2026-01-01
-
-# Screen Top traders excluding sports
-python3 polymarket_tracker.py --screen-top --exclude-group sports-soccer
+claude plugin marketplace add jampongsathorn/ulltimate-skills
+claude plugin install ulltimate-skills@ulltimate-skills
 ```
 
-### 2. Analyze Single Wallet
-```bash
-python3 polymarket_tracker.py --wallet 0x005ed998fcb786679eb8bfd0d20c15c0903d6d8e
+Or from inside a running session, with `/plugin`:
+
+```text
+/plugin marketplace add jampongsathorn/ulltimate-skills
+/plugin install ulltimate-skills@ulltimate-skills
 ```
 
-### 3. Run Real-Time Follow Bot
+Then restart Claude Code. Skills are namespaced by the plugin name:
+
+- Invoke one directly: `/ulltimate-skills:skill-creator`
+- Or just describe your task — Claude reads each skill's `description` and pulls the skill in when it fits,
+  e.g. *"turn this workflow we just did into a skill"*.
+
+### Try the repo without installing
+
 ```bash
-# Follow Lucerys (Top Temperature Specialist: +$111k PnL in temperature markets)
-python3 polymarket_tracker.py \
-  --follow-bot \
-  --target 0x1387d145aaf01f6e33b66525dda6e1f51f6955f8 \
-  --slug-group temp \
-  --poll-interval 15
+claude --plugin-dir /path/to/ulltimate-skills   # loads the plugin in place; /reload-plugins to re-read
 ```
 
----
+## Updating
 
-## 🤖 24/7 Automated Hosting via GitHub Actions
+After you push new skills, pull them into any machine that has the plugin installed:
 
-This repository includes an automated GitHub Actions cron workflow (`.github/workflows/polymarket-follow-bot.yml`) that runs every 5 minutes completely for free.
+```bash
+claude plugin marketplace update ulltimate-skills   # or `/plugin marketplace update ulltimate-skills`
+```
 
-### Setup:
-1. Go to your repo **Settings** > **Secrets and variables** > **Actions**.
-2. Add a repository secret named `DISCORD_WEBHOOK_URL` with your Discord webhook URL.
-3. Head to the **Actions** tab and enable the workflow. It will automatically check and alert new trades!
+There's deliberately **no `version` field** in `.claude-plugin/plugin.json`, so Claude Code versions the plugin
+by the git commit it fetched and updates land on the next marketplace refresh. If you ever want pinned releases,
+add `"version": "1.0.0"` to `plugin.json` and bump it whenever you want users to receive a change.
 
----
+## Adding a new skill
 
-## 📊 2026 YTD Top Weather Traders (1 Jan 2026 - 26 Sep 2026)
+Three ways, easiest first.
 
-| Rank | Trader | Wallet | Weather PnL | ROI % | Win Rate | $N_{\text{eff}}$ |
-| :---: | :--- | :--- | :---: | :---: | :---: | :---: |
-| **#1** | **Weather Master** | [`0x005ed9...6d8e`](https://polymarket.com/0x005ed998fcb786679eb8bfd0d20c15c0903d6d8e) | **+$125,110.91** | +874.8% | 99.0% | 370 |
-| **#2** | **Weather Sniper** | [`0x365323...ef74`](https://polymarket.com/0x3653235d75a0d5969c42f7514d4df8ea5f8cef74) | **+$90,677.80** | +970.7% | 95.5% | 263 |
-| **#3** | **0x1F85EB9C4** | [`0x1f85eb...7b02`](https://polymarket.com/0x1f85eb9c455c5bdef5d96c2739076678c7157b02) | **+$89,641.91** | +1287.3% | 100.0% | 202 |
-| **#4** | **0x8B8b9c565C** | [`0x8b8b9c...2512`](https://polymarket.com/0x8b8b9c565c8dca43cfb767f0f2c20b2b323d2512) | **+$81,000.03** | +1333.6% | 93.9% | 224 |
-| **#5** | **Lucerys** | [`0x1387d1...55f8`](https://polymarket.com/0x1387d145aaf01f6e33b66525dda6e1f51f6955f8) | **+$79,526.53** | +114.8% | 91.6% | 581 |
+1. **Ask Claude to do it.** With this plugin installed: *"Use the skill-creator skill to make a skill for X."*
+   That walks the full loop — draft → test prompts → human review of outputs → benchmark vs. baseline →
+   rewrite → repeat — and finishes by optimising the description for triggering. This is the recommended path
+   for anything you'll use often.
 
----
+2. **Scaffold, then edit.**
 
-## 📜 License
-MIT © [jampongsathorn](https://github.com/jampongsathorn)
+   ```bash
+   tools/new-skill.sh my-skill-name     # creates skills/my-skill-name/SKILL.md from templates/skill-template
+   ```
+
+3. **By hand.** Copy `templates/skill-template/` to `skills/<name>/` and fill in `SKILL.md`.
+
+Then validate and commit:
+
+```bash
+claude plugin validate .        # catches manifest and frontmatter mistakes
+git add -A && git commit -m "Add my-skill-name skill" && git push
+```
+
+One caveat while developing: skill changes are only picked up on reload. Use `claude --plugin-dir .` and
+`/reload-plugins`, or restart the session.
+
+## Layout
+
+```text
+.claude-plugin/
+├── marketplace.json     # makes this repo addable as a marketplace
+└── plugin.json          # the single plugin's manifest (name = skill namespace)
+skills/                  # ← every skill lives here; this folder is what Claude Code scans
+└── skill-creator/
+    ├── SKILL.md         # frontmatter (name, description) + instructions
+    ├── agents/          # subagent prompts used by the skill
+    ├── references/      # docs loaded only when needed
+    ├── scripts/         # Python helpers invoked by the skill
+    ├── assets/          # templates used by the skill
+    └── eval-viewer/     # HTML reviewer generator
+templates/
+└── skill-template/      # starting point for a new skill (outside skills/ on purpose)
+tools/
+└── new-skill.sh         # scaffolder
+```
+
+## Conventions
+
+- **One skill per directory** under `skills/`, named in kebab-case, each containing a `SKILL.md`.
+- **The `description` in the frontmatter is the trigger.** It is the only part always loaded into context
+  (~100 words), so write both *what it does* and *when to use it*, and lean slightly pushy — models tend to
+  under-trigger skills. Put "when to use" information there, not in the body.
+- **Keep `SKILL.md` under ~500 lines.** Beyond that, move detail into `references/` and point at it explicitly;
+  bundled scripts can run without ever being read.
+- **Bundle repeated work.** If a skill keeps writing the same helper script, commit it to the skill's `scripts/`.
+- **Only `SKILL.md` goes at the root of a skill directory.** Anything inside `skills/` that lacks a valid
+  `SKILL.md` is ignored at best, so templates and scratch work live outside it.
+- **Eval runs land in `<skill-name>-workspace/`** (that's what skill-creator writes) and are gitignored.
+
+## Requirements
+
+- Claude Code (any recent version; `plugin validate` used here is from 2.1.x).
+- Python 3 for the bundled scripts — standard library only, except `scripts/quick_validate.py`, which needs
+  PyYAML (`pip install pyyaml`).
+- The description-optimisation loop (`scripts/run_eval.py`, `scripts/run_loop.py`) shells out to `claude -p`,
+  so it needs the Claude Code CLI on `PATH`.
+
+## Credits
+
+`skills/skill-creator` is vendored unmodified from Anthropic's official plugin marketplace and is licensed
+under Apache-2.0 — see [`skills/skill-creator/LICENSE.txt`](skills/skill-creator/LICENSE.txt). Everything else
+here is personal configuration.

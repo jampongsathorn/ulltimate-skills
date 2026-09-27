@@ -47,13 +47,6 @@ python3 -m compileall skills/ -q
   - Triggers: "interview me", "walk me through the questions", "stress test my thinking", planning, design, CONTEXT.md, ADR
   - Not the same as "grill me": that phrase is reserved elsewhere for a subagent-critique loop that interrupts the user only once, at the end — use `grilling` only when a direct live interview is explicitly wanted instead.
 
-### Prediction Market & Analytics
-
-- **`polymarket-account-analytics`** — Query Polymarket leaderboards, analyze account net PnL ($), trading volume, % PnL on volume (Turnover ROI), and Capital Invested ROI (%). Evaluates smart money, directional whale returns, and market maker profiles with live API tools.
-  - Path: `skills/polymarket-account-analytics/SKILL.md`
-  - Scripts: `skills/polymarket-account-analytics/scripts/leaderboard.py`, `skills/polymarket-account-analytics/scripts/account_analyzer.py`
-  - Triggers: Polymarket PnL, % PnL, leaderboard query, whale tracking, prediction market returns, wallet audit
-
 ### Bug Fixing
 
 - **`bugfix-systematic`** — Systematic bug fixing that fixes root cause + all dependent files, not just one file. Enforces Reproduce → Root Cause Tree → Dependency Search → Fix Root → Fix All Impacted → Validate → Regression Guard. Stack generic JS/TS + Python. Use when bug fix is slow, incomplete, or fixes one file but breaks others.
