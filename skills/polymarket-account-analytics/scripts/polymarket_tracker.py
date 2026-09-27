@@ -2368,13 +2368,19 @@ def main():
         custom_targets = None
         if args.target:
             target_addr = args.target.strip().lower()
-            name = "Target Trader"
+            name = None
             cat = "Custom Track"
             for d in DEFAULT_FOLLOW_TARGETS:
                 if d["wallet"].lower() == target_addr:
                     name = d["name"]
                     cat = d["category"]
                     break
+            if not name:
+                off = fetch_official_user_stats(target_addr).get("ALL", {})
+                name = off.get("userName") or f"{target_addr[:6]}...{target_addr[-4:]}"
+                pnl = off.get("pnl")
+                if pnl is not None:
+                    cat = f"Verified Trader ({pnl:+,.0f} PnL)"
             custom_targets = [{"wallet": target_addr, "name": name, "category": cat}]
         inc_groups = [g.strip() for g in args.slug_group.split(",") if g.strip()] if args.slug_group and args.slug_group != "ALL" else None
         exc_groups = [g.strip() for g in args.exclude_group.split(",") if g.strip()] if args.exclude_group else None
