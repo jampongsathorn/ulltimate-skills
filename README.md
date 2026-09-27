@@ -50,11 +50,11 @@ python3 polymarket_tracker.py --wallet 0x005ed998fcb786679eb8bfd0d20c15c0903d6d8
 
 ### 3. Run Real-Time Follow Bot
 ```bash
-# Follow Lucerys (Top Highest Temperature Specialist: +$108k PnL in highest-temp)
+# Follow Lucerys (Top Temperature Specialist: +$111k PnL in temperature markets)
 python3 polymarket_tracker.py \
   --follow-bot \
   --target 0x1387d145aaf01f6e33b66525dda6e1f51f6955f8 \
-  --slug-group highest-temp \
+  --slug-group temp \
   --poll-interval 15
 ```
 
