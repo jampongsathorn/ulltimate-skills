@@ -21,6 +21,65 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, asdict
 
 PAPER_DB_PATH = "paper_trades_ledger.json"
+import sqlite3
+
+SQLITE_DB_PATH = "paper_trades.db"
+
+def init_paper_sqlite_db(db_path: str = SQLITE_DB_PATH) -> None:
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS paper_orders (
+        signal_id TEXT PRIMARY KEY,
+        strategy_version TEXT,
+        signal_ts REAL,
+        wallet TEXT,
+        market TEXT,
+        condition_id TEXT,
+        token_id TEXT,
+        side TEXT,
+        frozen_rule TEXT,
+        trader_entry_price REAL,
+        is_settled INTEGER,
+        settlement REAL,
+        settlement_ts REAL,
+        raw_json TEXT
+    )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_token ON paper_orders(token_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_settled ON paper_orders(is_settled)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_condition ON paper_orders(condition_id)")
+    conn.commit()
+    conn.close()
+
+def save_paper_order_sqlite(order: Dict[str, Any], db_path: str = SQLITE_DB_PATH) -> None:
+    init_paper_sqlite_db(db_path)
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("""
+    INSERT OR REPLACE INTO paper_orders 
+    (signal_id, strategy_version, signal_ts, wallet, market, condition_id, token_id, side, frozen_rule, trader_entry_price, is_settled, settlement, settlement_ts, raw_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        order.get("signal_id"),
+        order.get("strategy_version", "V1.2-FROZEN"),
+        order.get("signal_ts", 0.0),
+        order.get("wallet"),
+        order.get("market"),
+        order.get("condition_id"),
+        order.get("token_id"),
+        order.get("side"),
+        order.get("frozen_rule"),
+        order.get("trader_entry_price", 0.0),
+        1 if order.get("is_settled") else 0,
+        order.get("settlement"),
+        order.get("settlement_ts"),
+        json.dumps(order)
+    ))
+    conn.commit()
+    conn.close()
+
+
 CLOB_API_BASE = "https://clob.polymarket.com"
 GAMMA_API_BASE = "https://gamma-api.polymarket.com"
 CLIP_SIZES_USDC = [100.0, 500.0, 2000.0]
@@ -40,6 +99,11 @@ def load_paper_ledger(db_path: str = PAPER_DB_PATH) -> List[Dict[str, Any]]:
 def save_paper_ledger(ledger: List[Dict[str, Any]], db_path: str = PAPER_DB_PATH) -> None:
     with open(db_path, "w") as f:
         json.dump(ledger, f, indent=2)
+    try:
+        for o in ledger:
+            save_paper_order_sqlite(o)
+    except Exception:
+        pass
 
 
 def fetch_live_clob_book(token_id: str) -> Optional[Dict[str, Any]]:

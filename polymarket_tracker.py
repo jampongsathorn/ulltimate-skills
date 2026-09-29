@@ -2258,11 +2258,59 @@ def print_reverse_engineered_blueprint_cli(res: Dict[str, Any]) -> None:
 
 # ── 12. CLI Entry Point ────────────────────────────────────────────────────────
 
+
+def calculate_dynamic_kelly_sizing(
+    bankroll: float = 1000.0,
+    entry_price: float = 0.50,
+    win_rate: float = 0.65,
+    neff: int = 30,
+    fraction: float = 0.25
+) -> Dict[str, Any]:
+    """
+    Dynamic Fractional Kelly Criterion with Sample Reliability Shrinkage.
+    """
+    if entry_price <= 0 or entry_price >= 1.0:
+        return {"bankroll": bankroll, "suggested_bet_usd": 0.0, "verdict": "INVALID_PRICE"}
+    
+    edge = win_rate - entry_price
+    if edge <= 0:
+        return {
+            "bankroll": bankroll,
+            "entry_price": entry_price,
+            "win_rate_pct": round(win_rate * 100, 1),
+            "edge_pct": round(edge * 100, 2),
+            "safe_kelly_fraction": 0.0,
+            "suggested_bet_usd": 0.0,
+            "max_shares": 0,
+            "verdict": "NO EDGE (NEGATIVE EV - DO NOT TRADE) ❌"
+        }
+    
+    raw_kelly = edge / (1.0 - entry_price)
+    sample_scale = min(1.0, max(0.1, neff / 30.0))
+    safe_kelly = max(0.0, raw_kelly * fraction * sample_scale)
+    suggested_usd = round(min(bankroll * safe_kelly, bankroll * 0.15), 2)
+    shares = int(suggested_usd / entry_price) if entry_price > 0 else 0
+
+    return {
+        "bankroll": bankroll,
+        "entry_price": entry_price,
+        "win_rate_pct": round(win_rate * 100, 1),
+        "edge_pct": round(edge * 100, 2),
+        "safe_kelly_fraction": round(safe_kelly, 4),
+        "suggested_bet_usd": suggested_usd,
+        "max_shares": shares,
+        "verdict": "POSITIVE EV (TRADE RECOMMENDED) ✅"
+    }
+
 def main():
     parser = argparse.ArgumentParser(description="Polymarket 3-Dimensional Quantitative Engine & Rolling Walk-Forward Tracker")
     
     # Target
     parser.add_argument("--wallet", type=str, default="", help="Proxy wallet address (0x...) to analyze")
+    parser.add_argument("--kelly-sizing", "--optimal-size", action="store_true", help="Compute dynamic fractional Kelly sizing for an opportunity")
+    parser.add_argument("--bankroll", type=float, default=1000.0, help="Total portfolio bankroll (USD)")
+    parser.add_argument("--entry-price", type=float, default=0.45, help="Market entry price ($0.01 - $0.99)")
+    parser.add_argument("--win-rate", type=float, default=0.65, help="Estimated true win probability (0.01 - 0.99)")
     parser.add_argument("--paper-audit", "--follower-replay", action="store_true", help="Audit settled forward paper executions and print Point-in-Time Follower Replay Table")
     parser.add_argument("--paper-signal", type=str, default=None, help="Filter paper audit by strategy signal name")
     parser.add_argument("--simulate-execution", "--executable-edge", action="store_true", help="Simulate forward execution feasibility, VWAP slippage, and net realizable edge")
@@ -2304,7 +2352,22 @@ def main():
 
     args = parser.parse_args()
 
-    if args.paper_audit:
+    if args.kelly_sizing:
+        res = calculate_dynamic_kelly_sizing(args.bankroll, args.entry_price, args.win_rate, args.min_events)
+        if args.json:
+            print(json.dumps(res, indent=2))
+        else:
+            print("\n" + "═"*85)
+            print("  💰 DYNAMIC FRACTIONAL KELLY SIZING ENGINE (SAMPLE-WEIGHTED RISK GUARD)")
+            print("═"*85)
+            print(f"  • Bankroll:            ${res['bankroll']:,.2f}")
+            print(f"  • Entry Price:         ${res['entry_price']:.3f} (Implied Win Prob: {res['entry_price']*100:.1f}%)")
+            print(f"  • Estimated Win Rate:  {res['win_rate_pct']:.1f}% | Edge: {res['edge_pct']:+.1f}%")
+            print(f"  • Safe Kelly Fraction: {res['safe_kelly_fraction']*100:.2f}% of portfolio")
+            print(f"  • Recommended Sizing:  ${res['suggested_bet_usd']:,.2f} USD ({res['max_shares']:,} shares)")
+            print(f"  • Signal Status:       {res['verdict']}")
+            print("═"*85 + "\n")
+    elif args.paper_audit:
         from forward_paper_engine import audit_and_settle_paper_trades, generate_full_execution_matrix_report, print_follower_matrix_table_cli
         audit_and_settle_paper_trades()
         rep = generate_full_execution_matrix_report(args.paper_signal)
