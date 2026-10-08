@@ -144,11 +144,16 @@ evidence/          # one dated markdown file per verification, fixed table: time
                    # request class, HTTP/schema observation, semantic verdict, recommendation
 facts-ledger.md    # load-bearing facts with provenance, as_of, decay class, supersede
                    # pointers, and a one-command re-verify per fact
+                   # — start from assets/facts-ledger.md (this skill)
 .private/          # gitignored: raw bodies, snapshots, current working state
 runs/              # gitignored: durable run manifests for resume-never-duplicate
 ```
 
 Plus, in code: one validator module whose every raise message lists the accepted formats; evidence_ref + claim_boundary + observed_at required on artifacts that cross a stage boundary; a job state machine with validated transitions; dry-run default; and a literal human gate for irreversible writes.
+
+## Bundled resources
+
+- `assets/facts-ledger.md` — the `facts-ledger.md` template for the Layer-9 context-survival layer. Copy it into the project root when starting a mission; fill F-ids with verbatim facts, provenance, `as_of`, decay class, and a one-command re-verify per fact.
 
 ## Session checklist (when operating under this skill)
 
