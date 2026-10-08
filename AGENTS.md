@@ -49,9 +49,9 @@ python3 -m compileall skills/ -q
 
 ### Mission-Level Discipline (multi-session work)
 
-- **`agent-operating-system`** — The repo-level discipline layer that keeps a long-running agent from drifting across sessions, context resets, and real-world data. Builds a GOAL.md lock (North Star, Definition of Done, non-goals, pre-written drift warnings), a numbered CHECKPOINT_LOG ritual, fail-closed validators whose error messages teach the contract, evidence refs + claim boundaries on every artifact, human-literal write gates, and a test-false-first self-healing loop where real data disconfirms wrong assumptions.
+- **`agent-operating-system`** — The repo-level discipline layer that keeps a long-running agent from drifting across sessions, context resets, and real-world data. Builds a GOAL.md lock (North Star, Definition of Done, non-goals, pre-written drift warnings), a numbered CHECKPOINT_LOG ritual, fail-closed validators whose error messages teach the contract, evidence refs + claim boundaries on every artifact, human-literal write gates, a test-false-first self-healing loop where real data disconfirms wrong assumptions, and a context-survival layer (files beat memory, verbatim capture, provenance + decay classes + one-command re-verify per fact, hallucination tripwires).
   - Path: `skills/agent-operating-system/SKILL.md`
-  - Triggers: starting or inheriting a multi-session agent mission, an agent keeps "getting lost" or re-doing finished work, a pipeline must survive contact with real API data, reviewing/adopting a repo
+  - Triggers: starting or inheriting a multi-session agent mission, an agent keeps "getting lost" or re-doing finished work, a pipeline must survive contact with real API data, context compaction or long sessions start causing hallucinated details or false completion, reviewing/adopting a repo
   - Relationship: mission-level frame underneath `agentic-code-workflow` (one task), `agentic-problem-solving` (one blocker), `bugfix-systematic` (one bug), and `goal-keeper` (state file ritual)
 
 ### Bug Fixing

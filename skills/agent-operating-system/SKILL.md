@@ -1,6 +1,6 @@
 ---
 name: agent-operating-system
-description: The repo-level discipline layer that keeps a long-running agent from drifting across sessions, context resets, and real-world data. Build a GOAL.md lock (North Star, Definition of Done, non-goals, pre-written drift warnings), a numbered CHECKPOINT_LOG ritual, fail-closed validators whose error messages teach the contract, evidence refs + claim boundaries on every artifact, human-literal write gates, and a test-false-first self-healing loop where real data disconfirms wrong assumptions and every fix ships with a regression test. Use when starting or inheriting any multi-session agent mission, when an agent keeps "getting lost" or re-doing finished work, when a pipeline must survive contact with real API data, or when reviewing/adopting a repo like this. Complements agentic-code-workflow (one task), agentic-problem-solving (one blocker), bugfix-systematic (one bug), and handoff (state file) — this skill is the mission-level system underneath all of them.
+description: The repo-level discipline layer that keeps a long-running agent from drifting across sessions, context resets, and real-world data. Build a GOAL.md lock (North Star, Definition of Done, non-goals, pre-written drift warnings), a numbered CHECKPOINT_LOG ritual, fail-closed validators whose error messages teach the contract, evidence refs + claim boundaries on every artifact, human-literal write gates, a test-false-first self-healing loop where real data disconfirms wrong assumptions and every fix ships with a regression test, and a context-survival layer (files beat memory, verbatim capture, provenance + decay classes + one-command re-verify per fact, hallucination tripwires). Use when starting or inheriting any multi-session agent mission, when an agent keeps "getting lost" or re-doing finished work, when a pipeline must survive contact with real API data, when context compaction or long sessions start causing hallucinated details or false completion, or when reviewing/adopting a repo like this. Complements agentic-code-workflow (one task), agentic-problem-solving (one blocker), bugfix-systematic (one bug), and handoff (state file) — this skill is the mission-level system underneath all of them.
 ---
 
 # Agent Operating System (goal-locked, fail-closed, self-healing)
@@ -110,6 +110,28 @@ The loop, in one line: **assume you are wrong, make reality the referee, and tur
 
 The exit checklist for every work block: full test suite green (state the count), compilation passes, CLI renders, secrets scan of the repo clean, and — if anything external was touched — what exactly was and was not written. A checkpoint that says "done" without these lines is not a checkpoint.
 
+## Layer 9 — Context survival (memory hygiene)
+
+Every long mission outlives the context window. A compaction or session switch will replace lived memory with a summary — and that summary is written by the most context-saturated, most degraded version of the agent. Worse, the failure modes are silent: recall feels identical to knowledge. The rules below assume **you will forget, and you will not notice forgetting.**
+
+1. **Files beat memory. When your context and a file disagree, the file wins.** Treat your own recall of a specific string, number, path, or flag as *unverified* until re-read from disk. The feeling of familiarity is not verification — reconstruction of a plausible value feels exactly like remembering it.
+2. **Capture verbatim, immediately.** Error messages, regexes, ids, exact commands, exact argument names — into a file the moment you see them. A paraphrased error message ("the validator complained about the ref format") is operatively worthless; the real message (`must be a query-free http(s) URL, an evidence/ path, or a capture: identifier`) repairs the next agent in one step.
+3. **Write state early and often — never at compaction time.** The Layer-3 checkpoint ritual exists precisely because a handoff written at the edge of context exhaustion is written by the worst-positioned version of you. Small, frequent, structured beats one heroic summary.
+4. **Separate intent from state.** Plans survive compaction better than completion status, which breeds false completion ("I remember the tests passing" when only the *intention* to run them survived). A plan is what you meant; a manifest is what happened; the gap between them is the truth. Never claim completion from a plan.
+5. **Provenance and certainty travel with every load-bearing fact:** who observed it (user-reported / verified-live / inferred / hypothesis), when (`as_of`), and how confident. Compaction flattens hedges — "probably 7%, unverified" compresses to "7%" — so provenance must be written down *before* compression can eat it.
+6. **Classify knowledge by decay, and record the re-verify command.** Immutable (file content — re-read or hash), stable-until-change (test results — valid until files change), decaying (API behavior, prices, stock — re-verify before load-bearing use), volatile (auth, quota, rate limits — verify now). Every load-bearing fact should have a recorded one-liner command that re-verifies it; a fact with no re-verify command is unverifiable and must be labeled as such. Note that validators check *shape*, never *world-truth* — a pipeline will happily accept a wrong price in the right format.
+7. **Supersede, never silently overwrite.** When new evidence contradicts a recorded fact, append the new fact with a pointer to what it supersedes and why. Two conflicting statements with no ordering is how a future session inherits a contradiction it cannot resolve.
+8. **Re-anchor per block, not per session.** Mid-session, re-read GOAL.md and the newest checkpoint before starting each new subtask. Attention is strongest at the start and end of context; the middle is where early instructions silently die.
+9. **Beware interference between similar items.** Ten shops' rates held in memory will cross-contaminate (rate of shop A attributed to shop B). Tables in files don't interfere; heads do. Similarity is the risk factor — when items look alike, persist and re-read instead of recalling.
+
+### Hallucination tripwires (self-check before acting)
+
+- You find yourself *recalling* an exact value rather than *seeing* it on screen → stop, grep the file.
+- You are about to state a number/string that is not visible in any open file or recent quote → re-derive it with the recorded command, or label it unverified.
+- You can explain in confident detail why something works, but cannot name the file/observation where you learned it → it is reconstruction, not memory.
+- You "remember" doing a validation step but cannot point to its artifact/output → it did not happen yet.
+- A recorded fact's `as_of` is old and its decay class is "decaying" or worse → re-verify before relying on it.
+
 ---
 
 ## Installing this in a new project (minimal kit)
@@ -120,6 +142,8 @@ AGENTS.md          # "Start here every session" ritual + hard rules + write-gate
 CHECKPOINT_LOG.md  # numbered entries, fixed fields, newest last
 evidence/          # one dated markdown file per verification, fixed table: timestamp,
                    # request class, HTTP/schema observation, semantic verdict, recommendation
+facts-ledger.md    # load-bearing facts with provenance, as_of, decay class, supersede
+                   # pointers, and a one-command re-verify per fact
 .private/          # gitignored: raw bodies, snapshots, current working state
 runs/              # gitignored: durable run manifests for resume-never-duplicate
 ```
@@ -128,13 +152,16 @@ Plus, in code: one validator module whose every raise message lists the accepted
 
 ## Session checklist (when operating under this skill)
 
-- [ ] Read GOAL.md + newest checkpoint. Say the North Star back before doing anything.
+- [ ] Read GOAL.md + newest checkpoint. Say the North Star back before doing anything. Re-anchor again before each new subtask, not just each session.
 - [ ] Run the cheap checks (tests, doctor, status) before touching anything expensive or irreversible.
 - [ ] Resume the manifest; never re-run finished work. Check what is already done *before* planning.
+- [ ] Treat your own recall of exact strings/numbers/paths as unverified until re-read from a file. If it is load-bearing and you are recalling rather than seeing: grep it.
+- [ ] Capture error messages, ids, flags, and working commands verbatim into a file the moment you see them.
 - [ ] Before each external or expensive action: which DoD box does this move? If none — stop, it's drift.
 - [ ] After each block: checkpoint entry with all fixed fields, including negative evidence and claim boundaries.
 - [ ] When a validator rejects real data: investigate, don't bypass. Write the regression test first, then fix, then full suite, then document the correction.
 - [ ] Before claiming done: validation checklist, and say precisely what remains gated/blocked — a blocked path is reported as blocked, never papered over.
+- [ ] Before handing off: every load-bearing fact carries provenance, `as_of`, decay class, and a one-command re-verify. Anything that can't be re-verified is labeled as such.
 
 ## Drift tells (stop immediately if you notice these)
 
@@ -145,6 +172,10 @@ Plus, in code: one validator module whose every raise message lists the accepted
 - You are retrying or routing around a risk/stop response instead of honoring the recorded permanent rule.
 - You are about to write a checkpoint entry that has no "negative evidence" line because "everything worked".
 - You changed the goal (scope, definition of done) without a GOAL.md changelog entry.
+- You are using a fact you can see in context but cannot point to in any file — and it is load-bearing.
+- You are about to overwrite a recorded fact with a newer one without a supersedes pointer.
+- You "remember" completing a validation step but there is no artifact or output to point at.
+- A summary you inherited states something with full confidence that you know was originally hedged — re-check before building on it.
 
 ## Relationship to other skills
 

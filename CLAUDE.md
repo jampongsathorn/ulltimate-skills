@@ -10,7 +10,7 @@ It also works in Arena AI via root `AGENTS.md` index — Arena has no auto-load,
 - `trading-stats-mindset` — professor-level statistical mindset for time series trading: 5 checks (Distribution, Stationarity, Randomness, Sample size, Bias) + 4 priorities (Regime shift, Overfitting, Tail risk, Win rate illusion), decision tree, Python script generating report+memo
 - `self-grilling` / `domain-modeling` — direct live-interview as design tree, frontier rounds, plus docs (ADRs, glossary) — vendored from mattpocock/skills. Not the same as "grill me" (reserved elsewhere for a subagent-critique loop that only interrupts the user once, at the end).
 - `skill-creator` — create/improve skills, evals, benchmarks (vendored from anthropics/claude-plugins-official)
-- `agent-operating-system` — mission-level discipline layer for long-running agents: GOAL.md lock, CHECKPOINT_LOG ritual, fail-closed validators, evidence contract, human-literal write gates, test-false-first self-healing loop. Sits underneath `agentic-code-workflow` / `agentic-problem-solving` / `bugfix-systematic` / `goal-keeper`
+- `agent-operating-system` — mission-level discipline layer for long-running agents: GOAL.md lock, CHECKPOINT_LOG ritual, fail-closed validators, evidence contract, human-literal write gates, test-false-first self-healing loop, plus a context-survival layer (files beat memory, verbatim capture, provenance + decay classes + one-command re-verify, hallucination tripwires). Sits underneath `agentic-code-workflow` / `agentic-problem-solving` / `bugfix-systematic` / `goal-keeper`
 
 See `AGENTS.md` for Arena usage and full catalog.
 
