@@ -23,10 +23,10 @@
 - provenance: agent-observed
 - as_of: 2026-10-08
 - decay: decaying
-- re-verify: `<exact command that prints the ground truth>`
-- status: active
+- re-verify: `curl -s https://api.example.com/price | jq .usd`
+- status: superseded
 - supersedes: —
-- superseded_by: —
+- superseded_by: F-002
 - note: <optional: claim boundary — what this fact does NOT imply>
 
 ### F-002 · <an example of superseding>
@@ -34,7 +34,7 @@
 - provenance: agent-observed
 - as_of: 2026-10-09
 - decay: decaying
-- re-verify: `<command>`
+- re-verify: `curl -s https://api.example.com/price | jq .usd`
 - status: active
 - supersedes: F-001
 - superseded_by: —

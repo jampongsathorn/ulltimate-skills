@@ -144,7 +144,8 @@ evidence/          # one dated markdown file per verification, fixed table: time
                    # request class, HTTP/schema observation, semantic verdict, recommendation
 facts-ledger.md    # load-bearing facts with provenance, as_of, decay class, supersede
                    # pointers, and a one-command re-verify per fact
-                   # — start from assets/facts-ledger.md (this skill)
+                   # — start from skills/templates/facts-ledger.md (this repo);
+                   # validate with skills/templates/validate_facts_ledger.py
 .private/          # gitignored: raw bodies, snapshots, current working state
 runs/              # gitignored: durable run manifests for resume-never-duplicate
 ```
@@ -153,7 +154,8 @@ Plus, in code: one validator module whose every raise message lists the accepted
 
 ## Bundled resources
 
-- `assets/facts-ledger.md` — the `facts-ledger.md` template for the Layer-9 context-survival layer. Copy it into the project root when starting a mission; fill F-ids with verbatim facts, provenance, `as_of`, decay class, and a one-command re-verify per fact.
+- `skills/templates/facts-ledger.md` — the `facts-ledger.md` template for the Layer-9 context-survival layer. Copy it into the project root when starting a mission; fill F-ids with verbatim facts, provenance, `as_of`, decay class, and a one-command re-verify per fact.
+- `skills/templates/validate_facts_ledger.py` — fail-closed validator for the ledger (pure stdlib). Run it after every ledger edit; see the `agent-memory-hygiene` skill for the full contract.
 
 ## Session checklist (when operating under this skill)
 

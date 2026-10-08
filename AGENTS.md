@@ -54,6 +54,12 @@ python3 -m compileall skills/ -q
   - Triggers: starting or inheriting a multi-session agent mission, an agent keeps "getting lost" or re-doing finished work, a pipeline must survive contact with real API data, context compaction or long sessions start causing hallucinated details or false completion, reviewing/adopting a repo
   - Relationship: mission-level frame underneath `agentic-code-workflow` (one task), `agentic-problem-solving` (one blocker), `bugfix-systematic` (one bug), and `goal-keeper` (state file ritual)
 
+- **`agent-memory-hygiene`** — Survive long sessions and context compaction without hallucinating details, repeating finished work, or inheriting flattened confidence. Installs a `facts-ledger.md` (load-bearing facts with provenance, `as_of`, decay class, supersede pointers, and a one-command re-verify each) plus a fail-closed validator. Core law: files beat memory — recall is not verification.
+  - Path: `skills/agent-memory-hygiene/SKILL.md`
+  - Triggers: any task spanning multiple sessions or long context — even without a mission repo — when exact values (ids, prices, flags, error messages, paths) matter, when a compaction/summary is about to happen or just happened, or when you catch yourself "remembering" a value you cannot see
+  - Shared assets: `skills/templates/facts-ledger.md` (template) + `skills/templates/validate_facts_ledger.py` (fail-closed validator, pure stdlib)
+  - Relationship: the Layer-9 context-survival layer of `agent-operating-system`, extracted for standalone use
+
 ### Bug Fixing
 
 - **`bugfix-systematic`** — Systematic bug fixing that fixes root cause + all dependent files, not just one file. Enforces Reproduce → Root Cause Tree → Dependency Search → Fix Root → Fix All Impacted → Validate → Regression Guard. Stack generic JS/TS + Python. Use when bug fix is slow, incomplete, or fixes one file but breaks others.
