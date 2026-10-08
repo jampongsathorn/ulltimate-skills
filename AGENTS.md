@@ -47,6 +47,13 @@ python3 -m compileall skills/ -q
   - Triggers: "interview me", "walk me through the questions", "stress test my thinking", planning, design, CONTEXT.md, ADR
   - Not the same as "grill me": that phrase is reserved elsewhere for a subagent-critique loop that interrupts the user only once, at the end — use `self-grilling` only when a direct live interview is explicitly wanted instead.
 
+### Mission-Level Discipline (multi-session work)
+
+- **`agent-operating-system`** — The repo-level discipline layer that keeps a long-running agent from drifting across sessions, context resets, and real-world data. Builds a GOAL.md lock (North Star, Definition of Done, non-goals, pre-written drift warnings), a numbered CHECKPOINT_LOG ritual, fail-closed validators whose error messages teach the contract, evidence refs + claim boundaries on every artifact, human-literal write gates, and a test-false-first self-healing loop where real data disconfirms wrong assumptions.
+  - Path: `skills/agent-operating-system/SKILL.md`
+  - Triggers: starting or inheriting a multi-session agent mission, an agent keeps "getting lost" or re-doing finished work, a pipeline must survive contact with real API data, reviewing/adopting a repo
+  - Relationship: mission-level frame underneath `agentic-code-workflow` (one task), `agentic-problem-solving` (one blocker), `bugfix-systematic` (one bug), and `goal-keeper` (state file ritual)
+
 ### Bug Fixing
 
 - **`bugfix-systematic`** — Systematic bug fixing that fixes root cause + all dependent files, not just one file. Enforces Reproduce → Root Cause Tree → Dependency Search → Fix Root → Fix All Impacted → Validate → Regression Guard. Stack generic JS/TS + Python. Use when bug fix is slow, incomplete, or fixes one file but breaks others.
